@@ -1,0 +1,3896 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<title>◆ LIVEFX 5 ◆</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=VT323&family=Press+Start+2P&family=DotGothic16&display=swap" rel="stylesheet">
+<style>
+  :root {
+    /* pastel lavender chill palette */
+    --bg-0:    #1a1226;     /* deepest */
+    --bg-1:    #2a1e3d;     /* panel bg */
+    --bg-2:    #3a2a54;     /* raised */
+    --lav-1:   #c7b3ff;     /* primary lavender */
+    --lav-2:   #e8d9ff;     /* lightest */
+    --lav-3:   #9f85d9;     /* dim */
+    --pink:    #ffb3d9;     /* accent pink */
+    --mint:    #b3f0d9;     /* accent mint */
+    --peach:   #ffd4b3;     /* accent peach */
+    --cyan:    #b3e8ff;     /* accent cyan */
+    --yellow:  #fff0b3;
+    --on:      #b3f0d9;     /* toggle on */
+    --off:     #5a4275;     /* toggle off */
+    --ink:     #f4ecff;     /* text */
+    --ink-dim: #a494c4;
+    --border:  #6b4fa0;
+  }
+
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; user-select: none; -webkit-user-select: none; }
+
+  html, body {
+    margin: 0; padding: 0;
+    width: 100%; height: 100%;
+    background: var(--bg-0);
+    color: var(--ink);
+    font-family: 'VT323', 'DotGothic16', monospace;
+    overflow: hidden;
+    overscroll-behavior: none;
+    touch-action: manipulation;
+  }
+
+  /* pixel rendering for that crisp retro look */
+  img, canvas { image-rendering: pixelated; image-rendering: crisp-edges; }
+
+  #app {
+    position: fixed; inset: 0;
+    display: flex; flex-direction: column;
+    background: var(--bg-0);
+  }
+
+  /* ---------- STAGE (camera + canvas) ---------- */
+  #stage {
+    position: relative;
+    flex: 1 1 auto;
+    min-height: 0;
+    background: #000;
+    overflow: hidden;
+  }
+  #video { display: none; }
+  #glcanvas {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+    display: block;
+  }
+
+  /* CRT scanline overlay on UI itself (not on video) */
+  .scanlines::before {
+    content: ''; position: absolute; inset: 0; pointer-events: none;
+    background: repeating-linear-gradient(
+      0deg,
+      rgba(255,255,255,0.03) 0px,
+      rgba(255,255,255,0.03) 1px,
+      transparent 1px,
+      transparent 3px
+    );
+    z-index: 2;
+  }
+
+  /* ---------- TOP BAR ---------- */
+  #topbar {
+    position: absolute; top: 0; left: 0; right: 0;
+    padding: 10px 12px;
+    display: flex; justify-content: space-between; align-items: center;
+    z-index: 10;
+    background: linear-gradient(180deg, rgba(26,18,38,0.7) 0%, rgba(26,18,38,0) 100%);
+    pointer-events: none;
+  }
+  #topbar > * { pointer-events: auto; }
+  .logo {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 10px;
+    letter-spacing: 1px;
+    color: var(--lav-2);
+    text-shadow: 2px 2px 0 var(--bg-1), 0 0 8px rgba(199,179,255,0.5);
+  }
+  .logo .blink { animation: blink 1.2s steps(2, end) infinite; color: var(--pink); }
+  @keyframes blink { 50% { opacity: 0.2; } }
+
+  .rec-indicator {
+    display: none;
+    align-items: center; gap: 6px;
+    background: var(--bg-1);
+    padding: 4px 8px;
+    border: 2px solid var(--pink);
+    font-family: 'Press Start 2P', monospace;
+    font-size: 8px;
+    color: var(--pink);
+    box-shadow: 2px 2px 0 var(--bg-0);
+  }
+  .rec-indicator.active { display: flex; }
+  .rec-dot {
+    width: 8px; height: 8px; background: #ff5577;
+    animation: rec-pulse 1s steps(2) infinite;
+  }
+  @keyframes rec-pulse { 50% { opacity: 0.2; } }
+
+  /* ---------- BOTTOM CONTROL DOCK ---------- */
+  #dock {
+    flex: 0 0 auto;
+    background: var(--bg-1);
+    border-top: 3px solid var(--border);
+    box-shadow: 0 -4px 0 var(--bg-0);
+    display: flex; flex-direction: column;
+    max-height: 55vh;
+    min-height: 180px;
+    position: relative;
+  }
+
+  /* tab row */
+  #tabs {
+    display: flex;
+    background: var(--bg-0);
+    border-bottom: 2px solid var(--border);
+    overflow-x: auto;
+    scrollbar-width: none;
+    flex: 0 0 auto;
+  }
+  #tabs::-webkit-scrollbar { display: none; }
+  .tab {
+    flex: 1 0 auto;
+    padding: 10px 12px;
+    font-family: 'Press Start 2P', monospace;
+    font-size: 8px;
+    color: var(--ink-dim);
+    background: transparent;
+    border: none;
+    border-right: 1px dashed var(--border);
+    cursor: pointer;
+    white-space: nowrap;
+    letter-spacing: 0.5px;
+    transition: all 0.1s;
+    position: relative;
+  }
+  .tab.active {
+    color: var(--bg-0);
+    background: var(--lav-1);
+    text-shadow: none;
+  }
+  .tab.active::after {
+    content: '';
+    position: absolute; bottom: -2px; left: 0; right: 0; height: 2px;
+    background: var(--lav-1);
+  }
+  .tab .dot {
+    display: inline-block; width: 6px; height: 6px;
+    margin-left: 4px; background: transparent;
+    vertical-align: middle;
+  }
+  .tab.has-active .dot { background: var(--mint); box-shadow: 0 0 4px var(--mint); }
+
+  /* panel content */
+  #panel-wrap {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 12px 10px 14px;
+    -webkit-overflow-scrolling: touch;
+  }
+  #panel-wrap::-webkit-scrollbar { width: 6px; }
+  #panel-wrap::-webkit-scrollbar-track { background: var(--bg-0); }
+  #panel-wrap::-webkit-scrollbar-thumb { background: var(--lav-3); border-radius: 0; }
+
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  /* ---------- EFFECT TILE ---------- */
+  .fx {
+    background: var(--bg-2);
+    border: 2px solid var(--border);
+    margin-bottom: 8px;
+    padding: 8px 10px;
+    box-shadow: 2px 2px 0 var(--bg-0);
+    position: relative;
+  }
+  .fx.on { border-color: var(--mint); box-shadow: 2px 2px 0 var(--bg-0), 0 0 0 1px var(--mint) inset; }
+
+  .fx-head {
+    display: flex; align-items: center; justify-content: space-between;
+    cursor: pointer;
+  }
+  .fx-name {
+    font-family: 'DotGothic16', 'VT323', monospace;
+    font-size: 16px;
+    color: var(--lav-2);
+    letter-spacing: 0.5px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .fx.on .fx-name { color: var(--mint); }
+  .fx-name::before {
+    content: '▸';
+    color: var(--ink-dim);
+    transition: transform 0.15s;
+    display: inline-block;
+    font-size: 12px;
+  }
+  .fx.open .fx-name::before { transform: rotate(90deg); }
+
+  /* custom pixel toggle */
+  .toggle {
+    width: 40px; height: 20px;
+    background: var(--off);
+    border: 2px solid var(--bg-0);
+    position: relative;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .toggle::after {
+    content: '';
+    position: absolute; top: 0; left: 0;
+    width: 16px; height: 16px;
+    background: var(--lav-3);
+    transition: left 0.1s steps(3), background 0.1s;
+  }
+  .toggle.on { background: var(--on); }
+  .toggle.on::after { left: 20px; background: var(--bg-0); }
+
+  /* slider rows */
+  .fx-body {
+    display: none;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px dashed var(--border);
+  }
+  .fx.open .fx-body { display: block; }
+
+  .slider-row {
+    display: flex; align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  .slider-row:last-child { margin-bottom: 0; }
+
+  .slider-label {
+    flex: 0 0 70px;
+    font-family: 'VT323', monospace;
+    font-size: 15px;
+    color: var(--ink-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  /* pixel slider (tape deck fader vibe) */
+  input[type="range"] {
+    flex: 1 1 auto;
+    -webkit-appearance: none; appearance: none;
+    height: 14px;
+    background: transparent;
+    margin: 0;
+  }
+  input[type="range"]::-webkit-slider-runnable-track {
+    height: 10px;
+    background: var(--bg-0);
+    border: 2px solid var(--border);
+    border-radius: 0;
+  }
+  input[type="range"]::-moz-range-track {
+    height: 10px;
+    background: var(--bg-0);
+    border: 2px solid var(--border);
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 14px; height: 18px;
+    background: var(--lav-1);
+    border: 2px solid var(--bg-0);
+    border-radius: 0;
+    margin-top: -6px;
+    box-shadow: 1px 1px 0 var(--bg-0);
+    cursor: pointer;
+  }
+  input[type="range"]::-moz-range-thumb {
+    width: 14px; height: 18px;
+    background: var(--lav-1);
+    border: 2px solid var(--bg-0);
+    border-radius: 0;
+    box-shadow: 1px 1px 0 var(--bg-0);
+  }
+  .fx.on input[type="range"]::-webkit-slider-thumb { background: var(--mint); }
+  .fx.on input[type="range"]::-moz-range-thumb { background: var(--mint); }
+
+  .slider-val {
+    flex: 0 0 36px;
+    text-align: right;
+    font-family: 'VT323', monospace;
+    font-size: 15px;
+    color: var(--lav-2);
+  }
+
+  /* ---------- RIGHT-SIDE FLOATING CAM CONTROLS ---------- */
+  #camdock {
+    position: absolute;
+    right: 10px; top: 50%;
+    transform: translateY(-50%);
+    display: flex; flex-direction: column; gap: 10px;
+    z-index: 10;
+  }
+  .cam-btn {
+    width: 44px; height: 44px;
+    background: rgba(42,30,61,0.85);
+    border: 2px solid var(--lav-3);
+    color: var(--lav-2);
+    font-family: 'Press Start 2P', monospace;
+    font-size: 14px;
+    cursor: pointer;
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    box-shadow: 2px 2px 0 rgba(0,0,0,0.5);
+    display: flex; align-items: center; justify-content: center;
+    padding: 0;
+  }
+  .cam-btn:active { transform: translate(1px, 1px); box-shadow: 1px 1px 0 rgba(0,0,0,0.5); }
+  .cam-btn svg { width: 20px; height: 20px; }
+
+  /* ---------- BOTTOM ACTION BAR (record + master toggle) ---------- */
+  #actionbar {
+    flex: 0 0 auto;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 12px;
+    background: var(--bg-0);
+    border-top: 2px solid var(--border);
+    gap: 10px;
+  }
+  .rec-btn {
+    width: 56px; height: 56px;
+    border-radius: 50%;
+    background: #ff5577;
+    border: 3px solid var(--ink);
+    cursor: pointer;
+    box-shadow: 0 0 0 2px var(--bg-0), 2px 2px 0 var(--bg-1);
+    position: relative;
+    flex-shrink: 0;
+  }
+  .rec-btn::after {
+    content: '';
+    position: absolute; inset: 8px;
+    background: #ff5577;
+    border-radius: 50%;
+    transition: all 0.15s;
+  }
+  .rec-btn.recording::after {
+    inset: 16px;
+    border-radius: 3px;
+    background: var(--ink);
+  }
+  .rec-btn:active { transform: translate(1px, 1px); }
+
+  .act-side {
+    display: flex; flex-direction: column; gap: 4px;
+    font-family: 'VT323', monospace;
+    font-size: 14px;
+    color: var(--ink-dim);
+    min-width: 90px;
+  }
+  .act-side.right { text-align: right; }
+  .timer {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 11px;
+    color: var(--pink);
+    letter-spacing: 1px;
+  }
+  .fx-count {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 9px;
+    color: var(--mint);
+    letter-spacing: 1px;
+  }
+
+  .mini-btn {
+    background: var(--bg-1);
+    border: 2px solid var(--lav-3);
+    color: var(--lav-2);
+    font-family: 'Press Start 2P', monospace;
+    font-size: 8px;
+    padding: 6px 8px;
+    cursor: pointer;
+    box-shadow: 2px 2px 0 var(--bg-1);
+    letter-spacing: 0.5px;
+  }
+  .mini-btn:active { transform: translate(1px,1px); box-shadow: 1px 1px 0 var(--bg-1); }
+  .mini-btn.warn { border-color: var(--pink); color: var(--pink); }
+
+  /* ---------- INTRO SCREEN ---------- */
+  #intro {
+    position: fixed; inset: 0;
+    background: var(--bg-0);
+    z-index: 100;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 20px; text-align: center;
+    background-image:
+      radial-gradient(circle at 20% 30%, rgba(199,179,255,0.15) 0%, transparent 40%),
+      radial-gradient(circle at 80% 70%, rgba(255,179,217,0.12) 0%, transparent 40%),
+      repeating-linear-gradient(0deg, rgba(255,255,255,0.02) 0px, rgba(255,255,255,0.02) 1px, transparent 1px, transparent 4px);
+  }
+  .intro-title {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 24px;
+    color: var(--lav-1);
+    text-shadow: 3px 3px 0 var(--bg-1), 0 0 12px rgba(199,179,255,0.6);
+    margin-bottom: 8px;
+    letter-spacing: 2px;
+  }
+  .intro-sub {
+    font-family: 'DotGothic16', monospace;
+    font-size: 16px;
+    color: var(--pink);
+    margin-bottom: 40px;
+    letter-spacing: 1px;
+  }
+  .intro-btn {
+    background: var(--lav-1);
+    color: var(--bg-0);
+    border: 3px solid var(--ink);
+    font-family: 'Press Start 2P', monospace;
+    font-size: 11px;
+    padding: 14px 24px;
+    cursor: pointer;
+    box-shadow: 4px 4px 0 var(--pink);
+    letter-spacing: 2px;
+    margin-bottom: 12px;
+  }
+  .intro-btn:active { transform: translate(2px,2px); box-shadow: 2px 2px 0 var(--pink); }
+  .intro-hint {
+    font-family: 'VT323', monospace;
+    font-size: 14px;
+    color: var(--ink-dim);
+    margin-top: 8px;
+    max-width: 300px;
+    line-height: 1.3;
+  }
+  .intro-deco {
+    font-family: 'DotGothic16', monospace;
+    font-size: 20px;
+    color: var(--mint);
+    margin-bottom: 20px;
+    letter-spacing: 4px;
+    opacity: 0.7;
+  }
+
+  /* ---------- FLASH (capture feedback) ---------- */
+  #flash {
+    position: absolute; inset: 0;
+    background: white;
+    opacity: 0;
+    pointer-events: none;
+    z-index: 5;
+  }
+  #flash.go { animation: flash 0.3s steps(6); }
+  @keyframes flash { 0% { opacity: 0.8; } 100% { opacity: 0; } }
+
+  /* ---------- EXPORT MODAL ---------- */
+  #exportModal {
+    position: fixed; inset: 0;
+    background: rgba(26,18,38,0.92);
+    z-index: 50;
+    display: none;
+    align-items: center; justify-content: center;
+    padding: 20px;
+  }
+  #exportModal.show { display: flex; }
+  .export-box {
+    background: var(--bg-1);
+    border: 3px solid var(--lav-1);
+    box-shadow: 4px 4px 0 var(--bg-0);
+    padding: 20px;
+    max-width: 340px; width: 100%;
+    text-align: center;
+  }
+  .export-title {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 12px;
+    color: var(--mint);
+    margin-bottom: 12px;
+    letter-spacing: 1px;
+  }
+  .export-info {
+    font-family: 'VT323', monospace;
+    font-size: 16px;
+    color: var(--ink-dim);
+    margin-bottom: 16px;
+  }
+  .export-btns { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+  .export-btn {
+    background: var(--mint); color: var(--bg-0);
+    border: 2px solid var(--bg-0);
+    font-family: 'Press Start 2P', monospace;
+    font-size: 9px;
+    padding: 10px 14px; cursor: pointer;
+    box-shadow: 2px 2px 0 var(--bg-0);
+    letter-spacing: 1px;
+    text-decoration: none;
+    display: inline-block;
+  }
+  .export-btn.alt { background: var(--lav-1); }
+  .export-btn.close { background: var(--pink); }
+
+  /* ---------- CHROMA BUTTON + MODAL ---------- */
+  .chroma-btn {
+    width: 100%;
+    display: flex; align-items: center; gap: 8px;
+    background: var(--bg-0);
+    border: 2px solid var(--peach);
+    color: var(--peach);
+    font-family: 'Press Start 2P', monospace;
+    font-size: 8px;
+    padding: 6px 8px;
+    cursor: pointer;
+    letter-spacing: 0.5px;
+    box-shadow: 2px 2px 0 var(--bg-1);
+  }
+  .chroma-btn.active { background: var(--peach); color: var(--bg-0); }
+  .chroma-btn:active { transform: translate(1px,1px); box-shadow: 1px 1px 0 var(--bg-1); }
+  .ck-swatch-mini {
+    width: 14px; height: 14px; flex-shrink: 0;
+    border: 1px solid var(--ink);
+    box-shadow: inset 0 0 0 1px var(--bg-0);
+  }
+  #chromaModal {
+    position: fixed; inset: 0;
+    background: rgba(26,18,38,0.92);
+    z-index: 60;
+    display: none;
+    align-items: center; justify-content: center;
+    padding: 16px;
+  }
+  #chromaModal.show { display: flex; }
+  .ck-box {
+    background: var(--bg-1);
+    border: 3px solid var(--peach);
+    box-shadow: 4px 4px 0 var(--bg-0);
+    padding: 16px;
+    max-width: 360px; width: 100%;
+    max-height: 90vh;
+    overflow-y: auto;
+  }
+  .ck-title {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 11px;
+    color: var(--peach);
+    margin-bottom: 4px;
+    letter-spacing: 1px;
+    text-align: center;
+  }
+  .ck-sub {
+    font-family: 'VT323', monospace;
+    font-size: 14px;
+    color: var(--ink-dim);
+    text-align: center;
+    margin-bottom: 14px;
+  }
+  .ck-section {
+    margin-bottom: 12px;
+    padding-bottom: 10px;
+    border-bottom: 1px dashed var(--border);
+  }
+  .ck-section:last-child { border-bottom: none; }
+  .ck-section-label {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 8px;
+    color: var(--lav-2);
+    margin-bottom: 6px;
+    letter-spacing: 1px;
+  }
+  .ck-mode-row { display: flex; gap: 4px; }
+  .ck-mode-btn {
+    flex: 1;
+    font-family: 'Press Start 2P', monospace;
+    font-size: 7px;
+    padding: 8px 4px;
+    background: var(--bg-0);
+    color: var(--ink-dim);
+    border: 2px solid var(--border);
+    cursor: pointer;
+    letter-spacing: 0.5px;
+  }
+  .ck-mode-btn.active {
+    background: var(--peach); color: var(--bg-0); border-color: var(--ink);
+  }
+  .ck-color-row {
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: 8px;
+  }
+  .ck-big-swatch {
+    width: 48px; height: 48px;
+    border: 3px solid var(--ink);
+    box-shadow: 2px 2px 0 var(--bg-0);
+    flex-shrink: 0;
+    cursor: pointer;
+    position: relative;
+  }
+  .ck-big-swatch input[type="color"] {
+    position: absolute; inset: 0; opacity: 0; cursor: pointer;
+    width: 100%; height: 100%;
+  }
+  .ck-color-info {
+    font-family: 'VT323', monospace;
+    font-size: 14px;
+    color: var(--ink);
+    line-height: 1.3;
+  }
+  .ck-color-info .hex { color: var(--mint); }
+  .ck-eye-btn {
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+    width: 100%; padding: 10px;
+    background: var(--bg-2);
+    border: 2px solid var(--cyan);
+    color: var(--cyan);
+    font-family: 'Press Start 2P', monospace;
+    font-size: 8px;
+    cursor: pointer;
+    letter-spacing: 1px;
+    box-shadow: 2px 2px 0 var(--bg-0);
+  }
+  .ck-eye-btn.active { background: var(--cyan); color: var(--bg-0); }
+  .ck-eye-btn:active { transform: translate(1px,1px); box-shadow: 1px 1px 0 var(--bg-0); }
+  .ck-modal-btns {
+    display: flex; gap: 8px; justify-content: space-between; margin-top: 12px;
+  }
+  .ck-modal-btns .mini-btn { flex: 1; padding: 10px; font-size: 9px; }
+
+  /* eyedropper crosshair overlay on stage */
+  #eyeOverlay {
+    position: absolute; inset: 0;
+    z-index: 15;
+    cursor: crosshair;
+    background: rgba(0,0,0,0.1);
+    display: none;
+  }
+  #eyeOverlay.show { display: block; }
+  .eye-hint {
+    position: absolute; top: 20px; left: 50%;
+    transform: translateX(-50%);
+    background: var(--bg-0);
+    color: var(--cyan);
+    border: 2px solid var(--cyan);
+    padding: 6px 10px;
+    font-family: 'Press Start 2P', monospace;
+    font-size: 8px;
+    letter-spacing: 1px;
+    pointer-events: none;
+  }
+
+  /* invert checkbox pixel style */
+  .ck-check-row { display: flex; align-items: center; gap: 8px; }
+  .ck-check {
+    width: 18px; height: 18px; border: 2px solid var(--border);
+    background: var(--bg-0); cursor: pointer; position: relative;
+  }
+  .ck-check.on::after {
+    content: '✓'; position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--mint); font-size: 14px; font-family: 'Press Start 2P', monospace;
+  }
+  .ck-check-label {
+    font-family: 'VT323', monospace; font-size: 15px; color: var(--ink);
+  }
+
+  /* ---------- AUDIO PANEL ---------- */
+  .audio-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px; margin-bottom: 10px;
+    background: var(--bg-0); border: 2px solid var(--mint);
+    box-shadow: 2px 2px 0 var(--bg-2);
+    gap: 10px;
+  }
+  .audio-status { flex: 1; display: flex; flex-direction: column; gap: 4px; }
+  .mic-meter {
+    height: 10px; background: var(--bg-2); border: 2px solid var(--border);
+    overflow: hidden; position: relative;
+  }
+  .mic-meter-fill {
+    height: 100%; width: 0%;
+    background: linear-gradient(90deg, var(--mint) 0%, var(--yellow) 70%, var(--pink) 100%);
+    transition: width 0.04s linear;
+  }
+  .mic-status-label {
+    font-family: 'Press Start 2P', monospace; font-size: 8px;
+    color: var(--mint); letter-spacing: 1px;
+  }
+  .fx-badge {
+    display: inline-block; padding: 1px 4px;
+    background: var(--pink); color: var(--bg-0);
+    font-family: 'Press Start 2P', monospace; font-size: 7px;
+    letter-spacing: 1px;
+    border: 1px solid var(--bg-0);
+  }
+  .mini-btn.warn { border-color: var(--pink); color: var(--pink); }
+
+  /* ---------- PRESETS PANEL ---------- */
+  .preset-save-box {
+    background: var(--bg-0); border: 2px solid var(--pink);
+    padding: 10px; margin-bottom: 14px;
+    box-shadow: 2px 2px 0 var(--bg-2);
+  }
+  .preset-section-label {
+    font-family: 'Press Start 2P', monospace; font-size: 9px;
+    color: var(--pink); letter-spacing: 1px; text-align: center;
+    margin-bottom: 8px;
+  }
+  .preset-save-row {
+    display: flex; gap: 8px;
+  }
+  .preset-name-input {
+    flex: 1; background: var(--bg-2); border: 2px solid var(--lav-3);
+    color: var(--lav-2); padding: 8px;
+    font-family: 'VT323', monospace; font-size: 16px;
+    letter-spacing: 0.5px; outline: none;
+    -webkit-appearance: none; border-radius: 0;
+  }
+  .preset-name-input::placeholder { color: var(--ink-dim); }
+  .preset-name-input:focus { border-color: var(--pink); }
+  .preset-save-btn { background: var(--pink); color: var(--bg-0); border-color: var(--bg-0); }
+  .preset-summary {
+    margin-top: 6px;
+    font-family: 'VT323', monospace; font-size: 13px;
+    color: var(--ink-dim); text-align: center;
+  }
+  .preset-list-wrap { margin-top: 8px; }
+  .preset-list {
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .preset-empty {
+    font-family: 'VT323', monospace; font-size: 15px;
+    color: var(--ink-dim); text-align: center; padding: 20px;
+  }
+  .preset-row {
+    display: flex; align-items: center; justify-content: space-between;
+    background: var(--bg-2); border: 2px solid var(--border);
+    padding: 8px 10px; gap: 8px; box-shadow: 2px 2px 0 var(--bg-0);
+  }
+  .preset-info { flex: 1; min-width: 0; }
+  .preset-name {
+    font-family: 'DotGothic16', monospace; font-size: 16px;
+    color: var(--lav-2); letter-spacing: 0.5px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .preset-meta {
+    font-family: 'VT323', monospace; font-size: 13px;
+    color: var(--ink-dim); letter-spacing: 0.5px;
+  }
+  .preset-actions { display: flex; gap: 4px; flex-shrink: 0; }
+  .preset-load-btn {
+    background: var(--mint); color: var(--bg-0); border-color: var(--bg-0);
+  }
+  .preset-del-btn { padding: 6px 10px !important; font-size: 12px !important; }
+
+  #toast {
+    position: fixed; bottom: 100px; left: 50%;
+    transform: translateX(-50%);
+    background: var(--bg-1);
+    border: 2px solid var(--pink);
+    color: var(--pink);
+    font-family: 'Press Start 2P', monospace;
+    font-size: 9px;
+    padding: 8px 12px;
+    box-shadow: 2px 2px 0 var(--bg-0);
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.2s;
+    z-index: 200;
+    letter-spacing: 1px;
+  }
+  #toast.show { opacity: 1; }
+
+  /* hide dock when fullscreen-hidden (double-tap stage to hide) */
+  #app.hide-ui #dock, #app.hide-ui #actionbar, #app.hide-ui #topbar, #app.hide-ui #camdock { opacity: 0; pointer-events: none; }
+  #app.hide-ui #dock { transform: translateY(100%); }
+  #dock, #actionbar, #topbar, #camdock { transition: opacity 0.2s, transform 0.2s; }
+
+  /* tiny "tap stage to hide ui" hint */
+  .stage-hint {
+    position: absolute; bottom: 8px; left: 50%;
+    transform: translateX(-50%);
+    font-family: 'VT323', monospace;
+    font-size: 12px; color: var(--lav-2);
+    opacity: 0.6;
+    pointer-events: none;
+    text-shadow: 1px 1px 0 var(--bg-0);
+    z-index: 3;
+  }
+
+  @media (max-height: 600px) {
+    #dock { max-height: 48vh; min-height: 150px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="app" class="scanlines">
+  <!-- STAGE -->
+  <div id="stage">
+    <video id="video" autoplay playsinline muted></video>
+    <canvas id="glcanvas"></canvas>
+    <div id="flash"></div>
+
+    <div id="topbar">
+      <div class="logo">◆ LIVE<span class="blink">_</span>FX ◆</div>
+      <div class="rec-indicator" id="recIndicator">
+        <div class="rec-dot"></div>
+        <span id="recTime">00:00</span>
+      </div>
+    </div>
+
+    <div id="camdock">
+      <button class="cam-btn" id="flipBtn" title="Flip camera">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M4 7 L8 3 M4 7 L8 11 M4 7 L20 7 L20 11"/>
+          <path d="M20 17 L16 21 M20 17 L16 13 M20 17 L4 17 L4 13"/>
+        </svg>
+      </button>
+      <button class="cam-btn" id="shotBtn" title="Photo">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="7" width="18" height="13"/>
+          <circle cx="12" cy="13" r="4"/>
+          <path d="M8 7 L9 4 L15 4 L16 7"/>
+        </svg>
+      </button>
+      <button class="cam-btn" id="uiBtn" title="Hide UI">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M3 3 L9 3 L9 9 M21 3 L15 3 L15 9 M3 21 L9 21 L9 15 M21 21 L15 21 L15 15"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- DOCK -->
+  <div id="dock">
+    <div id="tabs"></div>
+    <div id="panel-wrap">
+      <!-- panels injected by JS -->
+    </div>
+    <div id="actionbar">
+      <div class="act-side">
+        <div class="fx-count" id="fxCount">0 FX ACTIVE</div>
+        <button class="mini-btn" id="resetBtn">RESET ALL</button>
+      </div>
+      <button class="rec-btn" id="recBtn" title="Record"></button>
+      <div class="act-side right">
+        <div class="timer" id="mainTimer">READY</div>
+        <button class="mini-btn warn" id="panicBtn">PANIC OFF</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- INTRO -->
+<div id="intro">
+  <div class="intro-deco">◇ ◆ ◇ ◆ ◇</div>
+  <div class="intro-title">LIVE FX</div>
+  <div class="intro-sub">~ phase one ~</div>
+  <button class="intro-btn" id="startBtn">START CAMERA</button>
+  <div class="intro-hint">Enable camera access.<br>Tap stage to toggle UI.<br>Turn on effects, twist the knobs, vibe out.</div>
+</div>
+
+<!-- EXPORT MODAL -->
+<div id="exportModal">
+  <div class="export-box">
+    <div class="export-title">◆ RECORDING SAVED ◆</div>
+    <div class="export-info" id="exportInfo">ready</div>
+    <div class="export-btns">
+      <a class="export-btn" id="downloadLink" download="livefx.webm">DOWNLOAD</a>
+      <button class="export-btn alt" id="shareBtn">SHARE</button>
+      <button class="export-btn close" id="closeExportBtn">CLOSE</button>
+    </div>
+  </div>
+</div>
+
+<!-- CHROMA KEY MODAL -->
+<div id="chromaModal">
+  <div class="ck-box">
+    <div class="ck-title">◆ CHROMA KEY ◆</div>
+    <div class="ck-sub" id="ckFxName">—</div>
+
+    <div class="ck-section">
+      <div class="ck-section-label">MODE</div>
+      <div class="ck-mode-row">
+        <button class="ck-mode-btn" data-mode="0">OFF</button>
+        <button class="ck-mode-btn" data-mode="1">ONLY ON COLOR</button>
+        <button class="ck-mode-btn" data-mode="2">EVERYWHERE EXCEPT</button>
+      </div>
+    </div>
+
+    <div class="ck-section">
+      <div class="ck-section-label">COLOR</div>
+      <div class="ck-color-row">
+        <label class="ck-big-swatch" id="ckBigSwatch">
+          <input type="color" id="ckColorInput" value="#00ff00">
+        </label>
+        <div class="ck-color-info">
+          tap swatch to open picker<br>
+          <span class="hex" id="ckHex">#00FF00</span>
+        </div>
+      </div>
+      <button class="ck-eye-btn" id="ckEyeBtn">◎ EYEDROPPER — TAP VIDEO</button>
+    </div>
+
+    <div class="ck-section">
+      <div class="ck-section-label">TOLERANCE</div>
+      <div class="slider-row">
+        <div class="slider-label">THRESH</div>
+        <input type="range" id="ckThresh" min="0" max="1" step="0.01" value="0.35">
+        <div class="slider-val" id="ckThreshVal">0.35</div>
+      </div>
+      <div class="slider-row">
+        <div class="slider-label">SOFT</div>
+        <input type="range" id="ckSoft" min="0" max="0.5" step="0.01" value="0.15">
+        <div class="slider-val" id="ckSoftVal">0.15</div>
+      </div>
+      <div class="ck-check-row">
+        <div class="ck-check" id="ckInvert"></div>
+        <div class="ck-check-label">INVERT MASK</div>
+      </div>
+    </div>
+
+    <div class="ck-modal-btns">
+      <button class="mini-btn" id="ckDoneBtn">DONE</button>
+    </div>
+  </div>
+</div>
+
+<!-- EYEDROPPER OVERLAY -->
+<div id="eyeOverlay">
+  <div class="eye-hint">TAP TO PICK COLOR</div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+/* =========================================================================
+   LIVEFX — phase 1
+   - WebGL pipeline: video → ping-pong framebuffers through active FX → screen
+   - Each FX is a fragment shader with named uniforms
+   - MediaRecorder captures the GL canvas (captureStream)
+   ========================================================================= */
+
+const $ = (id) => document.getElementById(id);
+const video = $('video');
+const canvas = $('glcanvas');
+const gl = canvas.getContext('webgl', { preserveDrawingBuffer: true, alpha: false, antialias: false });
+if (!gl) { alert('WebGL not supported on this browser'); }
+
+/* ---------- shader helpers ---------- */
+function compile(type, src) {
+  const s = gl.createShader(type);
+  gl.shaderSource(s, src);
+  gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+    console.error('Shader error:', gl.getShaderInfoLog(s), '\n', src);
+    throw new Error(gl.getShaderInfoLog(s));
+  }
+  return s;
+}
+function program(vsrc, fsrc) {
+  const p = gl.createProgram();
+  gl.attachShader(p, compile(gl.VERTEX_SHADER, vsrc));
+  gl.attachShader(p, compile(gl.FRAGMENT_SHADER, fsrc));
+  gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) {
+    throw new Error(gl.getProgramInfoLog(p));
+  }
+  return p;
+}
+
+const VS = `
+attribute vec2 a_pos;
+varying vec2 v_uv;
+uniform float u_flipY;
+uniform float u_flipX;
+void main() {
+  v_uv = vec2(
+    u_flipX > 0.5 ? 1.0 - (a_pos.x * 0.5 + 0.5) : (a_pos.x * 0.5 + 0.5),
+    u_flipY > 0.5 ? 1.0 - (a_pos.y * 0.5 + 0.5) : (a_pos.y * 0.5 + 0.5)
+  );
+  gl_Position = vec4(a_pos, 0.0, 1.0);
+}`;
+
+/* common header for all FX shaders */
+const FX_HEADER = `
+precision mediump float;
+varying vec2 v_uv;
+uniform sampler2D u_tex;
+uniform vec2 u_res;
+uniform float u_time;
+uniform float u_amt; // master amount 0..1
+uniform vec3 u_ckColor;    // chroma key target color
+uniform float u_ckThresh;  // 0..1 threshold
+uniform float u_ckSoft;    // 0..1 softness
+uniform float u_ckMode;    // 0 = off, 1 = only-where-color, 2 = everywhere-except
+uniform float u_ckInvert;  // 0/1 invert
+// returns effective amount for this pixel factoring in chroma mask
+float ckAmount(vec3 srcColor) {
+  if (u_ckMode < 0.5) return u_amt;
+  float d = distance(srcColor, u_ckColor);
+  float m = 1.0 - smoothstep(u_ckThresh, u_ckThresh + u_ckSoft + 0.001, d);
+  if (u_ckInvert > 0.5) m = 1.0 - m;
+  if (u_ckMode > 1.5) m = 1.0 - m;
+  return u_amt * m;
+}
+`;
+
+/* passthrough fragment */
+const F_PASS = FX_HEADER + `
+void main() { gl_FragColor = texture2D(u_tex, v_uv); }`;
+
+/* chroma-aware blend: takes original (u_tex) and effected (u_prev), blends by chroma mask */
+const F_CHROMA_BLEND = `
+precision mediump float;
+varying vec2 v_uv;
+uniform sampler2D u_tex;   // original (pre-FX)
+uniform sampler2D u_prev;  // effected (post-FX)
+uniform vec3 u_ckColor;
+uniform float u_ckThresh;
+uniform float u_ckSoft;
+uniform float u_ckMode;    // 1 = only where color, 2 = everywhere except
+uniform float u_ckInvert;
+void main() {
+  vec4 orig = texture2D(u_tex, v_uv);
+  vec4 fx   = texture2D(u_prev, v_uv);
+  if (u_ckMode < 0.5) { gl_FragColor = fx; return; }
+  float d = distance(orig.rgb, u_ckColor);
+  float m = 1.0 - smoothstep(u_ckThresh, u_ckThresh + u_ckSoft + 0.001, d);
+  if (u_ckInvert > 0.5) m = 1.0 - m;
+  if (u_ckMode > 1.5) m = 1.0 - m;  // invert for "everywhere except"
+  gl_FragColor = mix(orig, fx, m);
+}`;
+
+/* =========================================================================
+   FX LIBRARY — every effect has: id, name, category, shader, params[]
+   params = {name, min, max, default, step}
+   ========================================================================= */
+
+const FX = [
+
+  /* ============ COLOR / TONE ============ */
+  {
+    id: 'hue', name: 'HUE SHIFT', cat: 'color',
+    params: [ {n:'shift', min:0, max:1, def:0.5} ],
+    shader: FX_HEADER + `
+      uniform float p_shift;
+      vec3 hueShift(vec3 c, float h) {
+        const vec3 k = vec3(0.57735);
+        float ca = cos(h*6.2831), sa = sin(h*6.2831);
+        return c*ca + cross(k,c)*sa + k*dot(k,c)*(1.0-ca);
+      }
+      void main() {
+        vec4 c = texture2D(u_tex, v_uv);
+        c.rgb = hueShift(c.rgb, (p_shift-0.5)*u_amt);
+        gl_FragColor = c;
+      }`
+  },
+  {
+    id: 'sat', name: 'SATURATION', cat: 'color',
+    params: [ {n:'sat', min:0, max:2, def:1.5} ],
+    shader: FX_HEADER + `
+      uniform float p_sat;
+      void main() {
+        vec4 c = texture2D(u_tex, v_uv);
+        float l = dot(c.rgb, vec3(0.299,0.587,0.114));
+        vec3 m = mix(vec3(l), c.rgb, mix(1.0, p_sat, u_amt));
+        gl_FragColor = vec4(m, c.a);
+      }`
+  },
+  {
+    id: 'bright', name: 'BRIGHT/CONTRAST', cat: 'color',
+    params: [ {n:'bright', min:-1, max:1, def:0.1}, {n:'contrast', min:0, max:2, def:1.2} ],
+    shader: FX_HEADER + `
+      uniform float p_bright; uniform float p_contrast;
+      void main() {
+        vec4 c = texture2D(u_tex, v_uv);
+        vec3 r = (c.rgb - 0.5) * mix(1.0, p_contrast, u_amt) + 0.5 + p_bright*u_amt;
+        gl_FragColor = vec4(r, c.a);
+      }`
+  },
+  {
+    id: 'invert', name: 'INVERT', cat: 'color',
+    params: [ {n:'mix', min:0, max:1, def:1.0} ],
+    shader: FX_HEADER + `
+      uniform float p_mix;
+      void main() {
+        vec4 c = texture2D(u_tex, v_uv);
+        gl_FragColor = vec4(mix(c.rgb, 1.0-c.rgb, p_mix*u_amt), c.a);
+      }`
+  },
+  {
+    id: 'poster', name: 'POSTERIZE', cat: 'color',
+    params: [ {n:'levels', min:2, max:16, def:4, step:1} ],
+    shader: FX_HEADER + `
+      uniform float p_levels;
+      void main() {
+        vec4 c = texture2D(u_tex, v_uv);
+        float L = max(2.0, floor(p_levels));
+        vec3 q = floor(c.rgb * L) / L;
+        gl_FragColor = vec4(mix(c.rgb, q, u_amt), c.a);
+      }`
+  },
+  {
+    id: 'thresh', name: 'THRESHOLD', cat: 'color',
+    params: [ {n:'level', min:0, max:1, def:0.5} ],
+    shader: FX_HEADER + `
+      uniform float p_level;
+      void main() {
+        vec4 c = texture2D(u_tex, v_uv);
+        float l = dot(c.rgb, vec3(0.299,0.587,0.114));
+        float t = step(p_level, l);
+        gl_FragColor = vec4(mix(c.rgb, vec3(t), u_amt), c.a);
+      }`
+  },
+  {
+    id: 'sepia', name: 'SEPIA', cat: 'color',
+    params: [ {n:'tone', min:0, max:1, def:0.7} ],
+    shader: FX_HEADER + `
+      uniform float p_tone;
+      void main() {
+        vec4 c = texture2D(u_tex, v_uv);
+        float l = dot(c.rgb, vec3(0.299,0.587,0.114));
+        vec3 s = vec3(l*1.2, l*1.0, l*0.7);
+        gl_FragColor = vec4(mix(c.rgb, s, p_tone*u_amt), c.a);
+      }`
+  },
+  {
+    id: 'duotone', name: 'DUOTONE', cat: 'color',
+    params: [ {n:'hueA', min:0, max:1, def:0.8}, {n:'hueB', min:0, max:1, def:0.5} ],
+    shader: FX_HEADER + `
+      uniform float p_hueA; uniform float p_hueB;
+      vec3 hsv2rgb(vec3 c){vec4 K=vec4(1.0,2.0/3.0,1.0/3.0,3.0);vec3 p=abs(fract(c.xxx+K.xyz)*6.0-K.www);return c.z*mix(K.xxx,clamp(p-K.xxx,0.0,1.0),c.y);}
+      void main() {
+        vec4 c = texture2D(u_tex, v_uv);
+        float l = dot(c.rgb, vec3(0.299,0.587,0.114));
+        vec3 a = hsv2rgb(vec3(p_hueA, 0.7, 0.2));
+        vec3 b = hsv2rgb(vec3(p_hueB, 0.6, 1.0));
+        vec3 d = mix(a, b, l);
+        gl_FragColor = vec4(mix(c.rgb, d, u_amt), c.a);
+      }`
+  },
+  {
+    id: 'vignette', name: 'VIGNETTE', cat: 'color',
+    params: [ {n:'amount', min:0, max:1, def:0.7} ],
+    shader: FX_HEADER + `
+      uniform float p_amount;
+      void main() {
+        vec4 c = texture2D(u_tex, v_uv);
+        float d = distance(v_uv, vec2(0.5));
+        float v = smoothstep(0.8, 0.3, d);
+        c.rgb *= mix(1.0, v, p_amount*u_amt);
+        gl_FragColor = c;
+      }`
+  },
+  {
+    id: 'bloom', name: 'BLOOM', cat: 'color',
+    params: [ {n:'strength', min:0, max:2, def:0.8}, {n:'threshold', min:0, max:1, def:0.6} ],
+    shader: FX_HEADER + `
+      uniform float p_strength; uniform float p_threshold;
+      void main() {
+        vec4 c = texture2D(u_tex, v_uv);
+        vec2 px = 2.0/u_res;
+        vec3 sum = vec3(0.0);
+        for (int x=-2;x<=2;x++) for (int y=-2;y<=2;y++) {
+          vec3 s = texture2D(u_tex, v_uv + vec2(float(x),float(y))*px).rgb;
+          float l = dot(s, vec3(0.299,0.587,0.114));
+          sum += s * step(p_threshold, l);
+        }
+        sum /= 25.0;
+        gl_FragColor = vec4(c.rgb + sum * p_strength * u_amt, c.a);
+      }`
+  },
+
+  /* ============ DISTORTION ============ */
+  {
+    id: 'pixelate', name: 'PIXELATE', cat: 'distort',
+    params: [ {n:'size', min:1, max:80, def:16, step:1} ],
+    shader: FX_HEADER + `
+      uniform float p_size;
+      void main() {
+        float s = mix(1.0, max(1.0, p_size), u_amt);
+        vec2 uv = floor(v_uv * u_res / s) * s / u_res;
+        gl_FragColor = texture2D(u_tex, uv);
+      }`
+  },
+  {
+    id: 'mosaic', name: 'MOSAIC HEX', cat: 'distort',
+    params: [ {n:'size', min:4, max:80, def:20, step:1} ],
+    shader: FX_HEADER + `
+      uniform float p_size;
+      void main() {
+        vec2 uv = v_uv * u_res;
+        float s = max(4.0, p_size);
+        vec2 g = vec2(s, s*0.866);
+        vec2 gc = floor(uv / g);
+        vec2 ofs = vec2(mod(gc.y,2.0)*0.5, 0.0);
+        vec2 snap = (gc + 0.5 + ofs) * g / u_res;
+        gl_FragColor = texture2D(u_tex, mix(v_uv, snap, u_amt));
+      }`
+  },
+  {
+    id: 'kaleido', name: 'KALEIDOSCOPE', cat: 'distort',
+    params: [ {n:'segments', min:2, max:16, def:6, step:1}, {n:'rotate', min:0, max:1, def:0.0} ],
+    shader: FX_HEADER + `
+      uniform float p_segments; uniform float p_rotate;
+      void main() {
+        vec2 p = v_uv - 0.5;
+        float a = atan(p.y, p.x);
+        float r = length(p);
+        float seg = max(2.0, floor(p_segments));
+        float ang = 3.14159 / seg;
+        a = mod(a + p_rotate*6.2831, ang*2.0);
+        a = abs(a - ang);
+        vec2 uv = vec2(cos(a), sin(a)) * r + 0.5;
+        vec4 kc = texture2D(u_tex, uv);
+        vec4 oc = texture2D(u_tex, v_uv);
+        gl_FragColor = mix(oc, kc, u_amt);
+      }`
+  },
+  {
+    id: 'mirror', name: 'MIRROR', cat: 'distort',
+    params: [ {n:'mode', min:0, max:3, def:0, step:1} ],
+    shader: FX_HEADER + `
+      uniform float p_mode;
+      void main() {
+        vec2 uv = v_uv;
+        int m = int(p_mode);
+        if (m == 0) uv.x = uv.x < 0.5 ? uv.x*2.0 : (1.0 - uv.x)*2.0;
+        else if (m == 1) uv.y = uv.y < 0.5 ? uv.y*2.0 : (1.0 - uv.y)*2.0;
+        else if (m == 2) { uv = abs(uv - 0.5)*2.0; }
+        else { uv.x = uv.x > 0.5 ? uv.x : 1.0 - uv.x; uv.y = uv.y > 0.5 ? uv.y : 1.0 - uv.y; }
+        vec4 mc = texture2D(u_tex, uv);
+        vec4 oc = texture2D(u_tex, v_uv);
+        gl_FragColor = mix(oc, mc, u_amt);
+      }`
+  },
+  {
+    id: 'fisheye', name: 'FISHEYE', cat: 'distort',
+    params: [ {n:'strength', min:-1, max:1, def:0.5} ],
+    shader: FX_HEADER + `
+      uniform float p_strength;
+      void main() {
+        vec2 p = v_uv - 0.5;
+        float r = length(p);
+        float s = p_strength * u_amt;
+        float f = 1.0 + s * r * r;
+        vec2 uv = p / f + 0.5;
+        if (uv.x<0.0||uv.x>1.0||uv.y<0.0||uv.y>1.0) { gl_FragColor = vec4(0.0,0.0,0.0,1.0); return; }
+        gl_FragColor = texture2D(u_tex, uv);
+      }`
+  },
+  {
+    id: 'swirl', name: 'SWIRL', cat: 'distort',
+    params: [ {n:'amount', min:-8, max:8, def:3} ],
+    shader: FX_HEADER + `
+      uniform float p_amount;
+      void main() {
+        vec2 p = v_uv - 0.5;
+        float r = length(p);
+        float a = atan(p.y, p.x) + p_amount * u_amt * (1.0-r);
+        vec2 uv = vec2(cos(a), sin(a)) * r + 0.5;
+        gl_FragColor = texture2D(u_tex, uv);
+      }`
+  },
+  {
+    id: 'zoom', name: 'ZOOM BLUR', cat: 'distort',
+    params: [ {n:'amount', min:0, max:0.5, def:0.1} ],
+    shader: FX_HEADER + `
+      uniform float p_amount;
+      void main() {
+        vec2 dir = (v_uv - 0.5);
+        vec3 sum = vec3(0.0);
+        for (int i = 0; i < 10; i++) {
+          float t = float(i)/9.0;
+          sum += texture2D(u_tex, v_uv - dir * p_amount * t * u_amt).rgb;
+        }
+        gl_FragColor = vec4(sum/10.0, 1.0);
+      }`
+  },
+  {
+    id: 'ripple', name: 'RIPPLE', cat: 'distort',
+    params: [ {n:'freq', min:1, max:50, def:15}, {n:'amp', min:0, max:0.1, def:0.02} ],
+    shader: FX_HEADER + `
+      uniform float p_freq; uniform float p_amp;
+      void main() {
+        vec2 p = v_uv - 0.5;
+        float r = length(p);
+        float w = sin(r * p_freq - u_time * 3.0);
+        vec2 uv = v_uv + normalize(p) * w * p_amp * u_amt;
+        gl_FragColor = texture2D(u_tex, uv);
+      }`
+  },
+  {
+    id: 'wave', name: 'WAVE', cat: 'distort',
+    params: [ {n:'freq', min:1, max:40, def:10}, {n:'amp', min:0, max:0.1, def:0.02} ],
+    shader: FX_HEADER + `
+      uniform float p_freq; uniform float p_amp;
+      void main() {
+        vec2 uv = v_uv;
+        uv.x += sin(uv.y * p_freq + u_time * 2.0) * p_amp * u_amt;
+        uv.y += cos(uv.x * p_freq + u_time * 1.5) * p_amp * u_amt;
+        gl_FragColor = texture2D(u_tex, uv);
+      }`
+  },
+
+  /* ============ GLITCH / VAPORWAVE ============ */
+  {
+    id: 'rgb', name: 'RGB SHIFT', cat: 'glitch',
+    params: [ {n:'amount', min:0, max:0.05, def:0.008}, {n:'angle', min:0, max:1, def:0} ],
+    shader: FX_HEADER + `
+      uniform float p_amount; uniform float p_angle;
+      void main() {
+        vec2 d = vec2(cos(p_angle*6.2831), sin(p_angle*6.2831)) * p_amount * u_amt;
+        float r = texture2D(u_tex, v_uv + d).r;
+        float g = texture2D(u_tex, v_uv).g;
+        float b = texture2D(u_tex, v_uv - d).b;
+        gl_FragColor = vec4(r,g,b,1.0);
+      }`
+  },
+  {
+    id: 'chroma', name: 'CHROMA ABERR', cat: 'glitch',
+    params: [ {n:'strength', min:0, max:0.05, def:0.01} ],
+    shader: FX_HEADER + `
+      uniform float p_strength;
+      void main() {
+        vec2 d = (v_uv - 0.5) * p_strength * u_amt;
+        float r = texture2D(u_tex, v_uv + d).r;
+        float g = texture2D(u_tex, v_uv).g;
+        float b = texture2D(u_tex, v_uv - d).b;
+        gl_FragColor = vec4(r,g,b,1.0);
+      }`
+  },
+  {
+    id: 'scanlines', name: 'SCANLINES', cat: 'glitch',
+    params: [ {n:'density', min:1, max:800, def:200}, {n:'intensity', min:0, max:1, def:0.5} ],
+    shader: FX_HEADER + `
+      uniform float p_density; uniform float p_intensity;
+      void main() {
+        vec4 c = texture2D(u_tex, v_uv);
+        float s = sin(v_uv.y * p_density) * 0.5 + 0.5;
+        c.rgb *= mix(1.0, s, p_intensity*u_amt);
+        gl_FragColor = c;
+      }`
+  },
+  {
+    id: 'vhs', name: 'VHS', cat: 'glitch',
+    params: [ {n:'noise', min:0, max:1, def:0.3}, {n:'jitter', min:0, max:0.02, def:0.005} ],
+    shader: FX_HEADER + `
+      uniform float p_noise; uniform float p_jitter;
+      float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)))*43758.5); }
+      void main() {
+        float line = floor(v_uv.y * 240.0);
+        float j = (hash(vec2(line, floor(u_time*30.0))) - 0.5) * p_jitter * u_amt;
+        vec2 uv = v_uv + vec2(j, 0.0);
+        float r = texture2D(u_tex, uv + vec2(0.003*u_amt, 0)).r;
+        float g = texture2D(u_tex, uv).g;
+        float b = texture2D(u_tex, uv - vec2(0.003*u_amt, 0)).b;
+        vec3 c = vec3(r,g,b);
+        float n = (hash(v_uv + u_time) - 0.5) * p_noise * u_amt;
+        c += n;
+        float scan = sin(v_uv.y*600.0)*0.04*u_amt;
+        c -= scan;
+        gl_FragColor = vec4(c, 1.0);
+      }`
+  },
+  {
+    id: 'glitchblk', name: 'BLOCK GLITCH', cat: 'glitch',
+    params: [ {n:'chance', min:0, max:1, def:0.2}, {n:'size', min:2, max:40, def:10} ],
+    shader: FX_HEADER + `
+      uniform float p_chance; uniform float p_size;
+      float hash(vec2 p){ return fract(sin(dot(p, vec2(12.9898,78.233)))*43758.5); }
+      void main() {
+        vec2 block = floor(v_uv * u_res / p_size);
+        float tt = floor(u_time * 8.0);
+        float h = hash(block + tt);
+        vec2 uv = v_uv;
+        if (h > (1.0 - p_chance*u_amt)) {
+          uv.x += (hash(block + tt + 1.0) - 0.5) * 0.2 * u_amt;
+          uv.y += (hash(block + tt + 2.0) - 0.5) * 0.05 * u_amt;
+        }
+        vec4 c = texture2D(u_tex, uv);
+        if (h > (1.0 - p_chance*u_amt*0.3)) {
+          c.rgb = c.gbr;
+        }
+        gl_FragColor = c;
+      }`
+  },
+  {
+    id: 'noise', name: 'NOISE', cat: 'glitch',
+    params: [ {n:'amount', min:0, max:1, def:0.2} ],
+    shader: FX_HEADER + `
+      uniform float p_amount;
+      float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)))*43758.5); }
+      void main() {
+        vec4 c = texture2D(u_tex, v_uv);
+        float n = hash(v_uv + u_time) - 0.5;
+        c.rgb += n * p_amount * u_amt;
+        gl_FragColor = c;
+      }`
+  },
+  {
+    id: 'crt', name: 'CRT CURVE', cat: 'glitch',
+    params: [ {n:'curve', min:0, max:0.5, def:0.15} ],
+    shader: FX_HEADER + `
+      uniform float p_curve;
+      void main() {
+        vec2 uv = v_uv * 2.0 - 1.0;
+        vec2 off = abs(uv.yx) / vec2(6.0, 4.0);
+        uv += uv * off * off * p_curve * u_amt;
+        uv = uv * 0.5 + 0.5;
+        if (uv.x<0.0||uv.x>1.0||uv.y<0.0||uv.y>1.0) { gl_FragColor = vec4(0.02,0.01,0.03,1.0); return; }
+        vec4 c = texture2D(u_tex, uv);
+        float scan = 0.95 + 0.05 * sin(uv.y*800.0);
+        c.rgb *= mix(1.0, scan, u_amt);
+        gl_FragColor = c;
+      }`
+  },
+  {
+    id: 'ascii', name: 'ASCII', cat: 'glitch',
+    params: [ {n:'size', min:4, max:20, def:8, step:1} ],
+    shader: FX_HEADER + `
+      uniform float p_size;
+      void main() {
+        vec2 s = u_res / p_size;
+        vec2 cell = floor(v_uv * s) / s;
+        vec4 c = texture2D(u_tex, cell + 0.5/s);
+        float l = dot(c.rgb, vec3(0.299,0.587,0.114));
+        vec2 loc = fract(v_uv * s);
+        float ch = 0.0;
+        if (l < 0.2) ch = 0.0;
+        else if (l < 0.4) ch = step(0.4, length(loc-0.5)) * step(length(loc-0.5), 0.5);
+        else if (l < 0.6) ch = step(abs(loc.x-0.5), 0.1) + step(abs(loc.y-0.5), 0.1);
+        else if (l < 0.8) ch = step(abs(loc.x-loc.y), 0.15) + step(abs(loc.x+loc.y-1.0), 0.15);
+        else ch = 1.0;
+        ch = clamp(ch, 0.0, 1.0);
+        vec3 col = c.rgb * ch + vec3(0.02,0.01,0.03) * (1.0-ch);
+        gl_FragColor = vec4(mix(c.rgb, col, u_amt), 1.0);
+      }`
+  },
+  {
+    id: 'datamosh', name: 'DATAMOSH', cat: 'glitch',
+    params: [ {n:'shift', min:0, max:1, def:0.3}, {n:'bands', min:2, max:50, def:12} ],
+    shader: FX_HEADER + `
+      uniform float p_shift; uniform float p_bands;
+      float hash(float n){ return fract(sin(n)*43758.5); }
+      void main() {
+        float band = floor(v_uv.y * p_bands);
+        float t = floor(u_time * 4.0);
+        float s = (hash(band + t) - 0.5) * p_shift * u_amt;
+        vec2 uv = v_uv + vec2(s, 0.0);
+        gl_FragColor = texture2D(u_tex, uv);
+      }`
+  },
+
+  /* ============ FEEDBACK / TRAILS ============ */
+  {
+    id: 'echo', name: 'ECHO / TRAILS', cat: 'feedback', needPrev: true,
+    params: [ {n:'decay', min:0.5, max:0.99, def:0.9} ],
+    shader: FX_HEADER + `
+      uniform sampler2D u_prev;
+      uniform float p_decay;
+      void main() {
+        vec4 cur = texture2D(u_tex, v_uv);
+        vec4 pre = texture2D(u_prev, v_uv);
+        vec3 o = max(cur.rgb, pre.rgb * mix(0.0, p_decay, u_amt));
+        gl_FragColor = vec4(o, 1.0);
+      }`
+  },
+  {
+    id: 'ghost', name: 'GHOST', cat: 'feedback', needPrev: true,
+    params: [ {n:'mix', min:0, max:0.95, def:0.6} ],
+    shader: FX_HEADER + `
+      uniform sampler2D u_prev;
+      uniform float p_mix;
+      void main() {
+        vec4 cur = texture2D(u_tex, v_uv);
+        vec4 pre = texture2D(u_prev, v_uv);
+        gl_FragColor = mix(cur, pre, p_mix*u_amt);
+      }`
+  },
+  {
+    id: 'timeshift', name: 'TIME DISPLACE', cat: 'feedback', needPrev: true,
+    params: [ {n:'amount', min:0, max:1, def:0.7} ],
+    shader: FX_HEADER + `
+      uniform sampler2D u_prev;
+      uniform float p_amount;
+      void main() {
+        vec4 cur = texture2D(u_tex, v_uv);
+        float mask = smoothstep(0.3, 0.7, v_uv.y);
+        vec4 pre = texture2D(u_prev, v_uv);
+        vec4 o = mix(cur, pre, mask * p_amount * u_amt);
+        gl_FragColor = o;
+      }`
+  },
+  {
+    id: 'mblur', name: 'MOTION BLUR', cat: 'feedback', needPrev: true,
+    params: [ {n:'amount', min:0, max:0.95, def:0.5} ],
+    shader: FX_HEADER + `
+      uniform sampler2D u_prev;
+      uniform float p_amount;
+      void main() {
+        vec4 cur = texture2D(u_tex, v_uv);
+        vec4 pre = texture2D(u_prev, v_uv);
+        gl_FragColor = mix(cur, (cur+pre)*0.5, p_amount*u_amt);
+      }`
+  },
+  {
+    id: 'smear', name: 'SMEAR', cat: 'feedback', needPrev: true,
+    params: [ {n:'decay', min:0.8, max:0.995, def:0.95}, {n:'dir', min:-1, max:1, def:0.3} ],
+    shader: FX_HEADER + `
+      uniform sampler2D u_prev;
+      uniform float p_decay; uniform float p_dir;
+      void main() {
+        vec4 cur = texture2D(u_tex, v_uv);
+        vec2 off = vec2(0.0, p_dir * 0.003) * u_amt;
+        vec4 pre = texture2D(u_prev, v_uv + off);
+        vec3 o = max(cur.rgb, pre.rgb * p_decay);
+        gl_FragColor = vec4(o, 1.0);
+      }`
+  },
+
+  /* ============ ART / STYLE ============ */
+  {
+    id: 'edge', name: 'EDGE DETECT', cat: 'art',
+    params: [ {n:'strength', min:0, max:5, def:2} ],
+    shader: FX_HEADER + `
+      uniform float p_strength;
+      void main() {
+        vec2 px = 1.0/u_res;
+        vec3 tl = texture2D(u_tex, v_uv+vec2(-px.x,-px.y)).rgb;
+        vec3 tr = texture2D(u_tex, v_uv+vec2( px.x,-px.y)).rgb;
+        vec3 bl = texture2D(u_tex, v_uv+vec2(-px.x, px.y)).rgb;
+        vec3 br = texture2D(u_tex, v_uv+vec2( px.x, px.y)).rgb;
+        vec3 gx = (tr+br) - (tl+bl);
+        vec3 gy = (bl+br) - (tl+tr);
+        float e = length(gx) + length(gy);
+        vec3 orig = texture2D(u_tex, v_uv).rgb;
+        gl_FragColor = vec4(mix(orig, vec3(e*p_strength), u_amt), 1.0);
+      }`
+  },
+  {
+    id: 'cartoon', name: 'CARTOON', cat: 'art',
+    params: [ {n:'bands', min:2, max:10, def:4, step:1}, {n:'edge', min:0, max:3, def:1.2} ],
+    shader: FX_HEADER + `
+      uniform float p_bands; uniform float p_edge;
+      void main() {
+        vec2 px = 1.0/u_res;
+        vec4 c = texture2D(u_tex, v_uv);
+        float L = max(2.0, floor(p_bands));
+        vec3 q = floor(c.rgb * L) / L;
+        vec3 tl = texture2D(u_tex, v_uv+vec2(-px.x,-px.y)).rgb;
+        vec3 br = texture2D(u_tex, v_uv+vec2( px.x, px.y)).rgb;
+        float e = length(br - tl) * p_edge;
+        vec3 o = q * (1.0 - clamp(e, 0.0, 1.0));
+        gl_FragColor = vec4(mix(c.rgb, o, u_amt), 1.0);
+      }`
+  },
+  {
+    id: 'emboss', name: 'EMBOSS', cat: 'art',
+    params: [ {n:'strength', min:0, max:3, def:1.5} ],
+    shader: FX_HEADER + `
+      uniform float p_strength;
+      void main() {
+        vec2 px = 1.0/u_res;
+        vec3 a = texture2D(u_tex, v_uv - px).rgb;
+        vec3 b = texture2D(u_tex, v_uv + px).rgb;
+        vec3 e = (b - a) * p_strength + 0.5;
+        vec3 orig = texture2D(u_tex, v_uv).rgb;
+        gl_FragColor = vec4(mix(orig, e, u_amt), 1.0);
+      }`
+  },
+  {
+    id: 'halftone', name: 'HALFTONE', cat: 'art',
+    params: [ {n:'size', min:4, max:40, def:8, step:1} ],
+    shader: FX_HEADER + `
+      uniform float p_size;
+      void main() {
+        vec2 s = u_res / p_size;
+        vec2 cell = floor(v_uv * s)/s;
+        vec4 c = texture2D(u_tex, cell + 0.5/s);
+        float l = dot(c.rgb, vec3(0.299,0.587,0.114));
+        vec2 loc = fract(v_uv * s) - 0.5;
+        float d = length(loc);
+        float dot = step(d, (1.0 - l) * 0.5);
+        vec3 o = mix(vec3(1.0), vec3(0.0), dot);
+        gl_FragColor = vec4(mix(c.rgb, o, u_amt), 1.0);
+      }`
+  },
+  {
+    id: 'dither', name: 'DITHER', cat: 'art',
+    params: [ {n:'levels', min:2, max:8, def:3, step:1} ],
+    shader: FX_HEADER + `
+      uniform float p_levels;
+      float bayer(vec2 p) {
+        p = mod(p, 4.0);
+        float i = p.y * 4.0 + p.x;
+        float b;
+        if (i < 1.0) b = 0.0;
+        else if (i < 2.0) b = 8.0;
+        else if (i < 3.0) b = 2.0;
+        else if (i < 4.0) b = 10.0;
+        else if (i < 5.0) b = 12.0;
+        else if (i < 6.0) b = 4.0;
+        else if (i < 7.0) b = 14.0;
+        else if (i < 8.0) b = 6.0;
+        else if (i < 9.0) b = 3.0;
+        else if (i < 10.0) b = 11.0;
+        else if (i < 11.0) b = 1.0;
+        else if (i < 12.0) b = 9.0;
+        else if (i < 13.0) b = 15.0;
+        else if (i < 14.0) b = 7.0;
+        else if (i < 15.0) b = 13.0;
+        else b = 5.0;
+        return b / 16.0;
+      }
+      void main() {
+        vec4 c = texture2D(u_tex, v_uv);
+        float L = max(2.0, floor(p_levels));
+        float b = bayer(floor(v_uv * u_res));
+        vec3 d = floor(c.rgb * L + b) / L;
+        gl_FragColor = vec4(mix(c.rgb, d, u_amt), 1.0);
+      }`
+  },
+  {
+    id: 'oil', name: 'OIL PAINT', cat: 'art',
+    params: [ {n:'radius', min:1, max:5, def:2, step:1} ],
+    shader: FX_HEADER + `
+      uniform float p_radius;
+      void main() {
+        vec2 px = 1.0/u_res;
+        float r = max(1.0, floor(p_radius));
+        vec3 sum = vec3(0.0); float cnt = 0.0;
+        for (int x=-3;x<=3;x++) for (int y=-3;y<=3;y++) {
+          if (abs(float(x)) > r || abs(float(y)) > r) continue;
+          vec3 s = texture2D(u_tex, v_uv + vec2(float(x),float(y))*px).rgb;
+          s = floor(s * 6.0) / 6.0;
+          sum += s; cnt += 1.0;
+        }
+        vec3 avg = sum / max(cnt, 1.0);
+        vec3 orig = texture2D(u_tex, v_uv).rgb;
+        gl_FragColor = vec4(mix(orig, avg, u_amt), 1.0);
+      }`
+  },
+  {
+    id: 'asciiColor', name: 'NEON EDGE', cat: 'art',
+    params: [ {n:'strength', min:0, max:5, def:2}, {n:'hue', min:0, max:1, def:0.5} ],
+    shader: FX_HEADER + `
+      uniform float p_strength; uniform float p_hue;
+      vec3 hsv2rgb(vec3 c){vec4 K=vec4(1.0,2.0/3.0,1.0/3.0,3.0);vec3 p=abs(fract(c.xxx+K.xyz)*6.0-K.www);return c.z*mix(K.xxx,clamp(p-K.xxx,0.0,1.0),c.y);}
+      void main() {
+        vec2 px = 1.0/u_res;
+        vec3 tl = texture2D(u_tex, v_uv+vec2(-px.x,-px.y)).rgb;
+        vec3 br = texture2D(u_tex, v_uv+vec2( px.x, px.y)).rgb;
+        vec3 tr = texture2D(u_tex, v_uv+vec2( px.x,-px.y)).rgb;
+        vec3 bl = texture2D(u_tex, v_uv+vec2(-px.x, px.y)).rgb;
+        float e = length((tr+br)-(tl+bl)) + length((bl+br)-(tl+tr));
+        e *= p_strength;
+        vec3 glow = hsv2rgb(vec3(p_hue, 0.8, 1.0)) * e;
+        vec3 orig = texture2D(u_tex, v_uv).rgb * 0.3;
+        gl_FragColor = vec4(mix(texture2D(u_tex, v_uv).rgb, orig + glow, u_amt), 1.0);
+      }`
+  },
+
+  /* ============ FRAMING (grids + borders + tile fx) ============ */
+  {
+    id: 'grid', name: 'TILE GRID', cat: 'framing',
+    params: [
+      {n:'count', min:1, max:6, def:2, step:1, labels:['1x1','2x2','3x3','4x4','2x3','3x4']},
+      {n:'gap', min:0, max:0.05, def:0.005},
+      {n:'hueOffset', min:0, max:1, def:0.0},
+      {n:'timeOffset', min:0, max:2, def:0.0},
+    ],
+    shader: FX_HEADER + `
+      uniform float p_count;
+      uniform float p_gap;
+      uniform float p_hueOffset;
+      uniform float p_timeOffset;
+      vec3 hueShift(vec3 c, float h) {
+        const vec3 k = vec3(0.57735);
+        float ca = cos(h*6.2831), sa = sin(h*6.2831);
+        return c*ca + cross(k,c)*sa + k*dot(k,c)*(1.0-ca);
+      }
+      void main() {
+        vec2 dims;
+        int idx = int(floor(p_count + 0.5));
+        if (idx == 0) dims = vec2(1.0, 1.0);
+        else if (idx == 1) dims = vec2(2.0, 2.0);
+        else if (idx == 2) dims = vec2(3.0, 3.0);
+        else if (idx == 3) dims = vec2(4.0, 4.0);
+        else if (idx == 4) dims = vec2(2.0, 3.0);
+        else dims = vec2(3.0, 4.0);
+
+        vec2 cell = floor(v_uv * dims);
+        vec2 local = fract(v_uv * dims);
+        // gap lines
+        float gg = p_gap * max(dims.x, dims.y);
+        if (local.x < gg || local.x > 1.0-gg || local.y < gg || local.y > 1.0-gg) {
+          gl_FragColor = vec4(0.04, 0.02, 0.06, 1.0); return;
+        }
+        vec3 src = texture2D(u_tex, local).rgb;
+        float tileIdx = cell.y * dims.x + cell.x;
+        float total = dims.x * dims.y;
+        // hue shift per tile
+        src = hueShift(src, (tileIdx / total) * p_hueOffset);
+        vec4 orig = texture2D(u_tex, v_uv);
+        gl_FragColor = vec4(mix(orig.rgb, src, u_amt), 1.0);
+      }`
+  },
+  {
+    id: 'mirror4', name: 'MIRROR 4-WAY', cat: 'framing',
+    params: [ {n:'rotate', min:0, max:1, def:0.0} ],
+    shader: FX_HEADER + `
+      uniform float p_rotate;
+      void main() {
+        vec2 p = v_uv - 0.5;
+        float a = atan(p.y, p.x) + p_rotate * 6.2831;
+        float r = length(p);
+        vec2 pr = vec2(cos(a), sin(a)) * r;
+        vec2 uv = abs(pr) + 0.5;
+        uv = fract(uv);
+        vec3 src = texture2D(u_tex, uv).rgb;
+        vec4 orig = texture2D(u_tex, v_uv);
+        gl_FragColor = vec4(mix(orig.rgb, src, u_amt), 1.0);
+      }`
+  },
+  {
+    id: 'frameborder', name: 'PIXEL FRAME', cat: 'framing',
+    params: [
+      {n:'style', min:0, max:7, def:0, step:1, labels:['THICK','DASHED','HEARTS','SPARKLE','SCALLOP','CRT','POLAROID','VHS']},
+      {n:'size', min:0.01, max:0.2, def:0.06},
+      {n:'hue', min:0, max:1, def:0.83},
+    ],
+    shader: FX_HEADER + `
+      uniform float p_style;
+      uniform float p_size;
+      uniform float p_hue;
+      vec3 hsv2rgb(vec3 c){vec4 K=vec4(1.0,2.0/3.0,1.0/3.0,3.0);vec3 p=abs(fract(c.xxx+K.xyz)*6.0-K.www);return c.z*mix(K.xxx,clamp(p-K.xxx,0.0,1.0),c.y);}
+      float heart(vec2 p) {
+        p.y -= 0.15;
+        float a = atan(p.x, p.y)/3.14159;
+        float r = length(p);
+        float h = abs(a);
+        return (13.0*h - 22.0*h*h + 10.0*h*h*h)/(6.0-5.0*h) - r;
+      }
+      void main() {
+        vec4 orig = texture2D(u_tex, v_uv);
+        vec2 d = min(v_uv, 1.0 - v_uv); // distance to nearest edge
+        float minD = min(d.x, d.y);
+        int style = int(floor(p_style + 0.5));
+        vec3 fcol = hsv2rgb(vec3(p_hue, 0.5, 1.0));
+        float mask = 0.0;
+
+        if (style == 0) {
+          // THICK pixel border
+          mask = step(minD, p_size);
+          fcol = hsv2rgb(vec3(p_hue, 0.55, 0.95));
+        } else if (style == 1) {
+          // DASHED
+          float onEdge = step(minD, p_size);
+          float dashX = step(0.5, fract(v_uv.x * 12.0));
+          float dashY = step(0.5, fract(v_uv.y * 12.0));
+          mask = onEdge * max(dashX, dashY);
+        } else if (style == 2) {
+          // HEARTS along edge
+          float inner = step(minD, p_size);
+          float heartRow = 0.0;
+          if (minD == d.y) {
+            float hx = fract(v_uv.x * 14.0) - 0.5;
+            float hy = (v_uv.y < 0.5 ? v_uv.y : 1.0 - v_uv.y) / p_size;
+            heartRow = step(0.0, heart(vec2(hx*1.5, (1.0-hy)*0.8 - 0.4)));
+          } else {
+            float hy = fract(v_uv.y * 14.0) - 0.5;
+            float hx = (v_uv.x < 0.5 ? v_uv.x : 1.0 - v_uv.x) / p_size;
+            heartRow = step(0.0, heart(vec2(hy*1.5, (1.0-hx)*0.8 - 0.4)));
+          }
+          mask = inner * heartRow;
+          fcol = hsv2rgb(vec3(p_hue, 0.6, 1.0));
+        } else if (style == 3) {
+          // SPARKLE
+          float inner = step(minD, p_size);
+          float sx = fract(v_uv.x * 24.0) - 0.5;
+          float sy = fract(v_uv.y * 24.0) - 0.5;
+          float s = step(abs(sx) + abs(sy), 0.15) + step(max(abs(sx*3.0), abs(sy*3.0)), 0.3);
+          mask = inner * clamp(s, 0.0, 1.0);
+          fcol = hsv2rgb(vec3(p_hue + sin(u_time)*0.1, 0.4, 1.0));
+        } else if (style == 4) {
+          // SCALLOP
+          float edgePos = minD == d.y ? v_uv.x : v_uv.y;
+          float wave = (sin(edgePos * 60.0) * 0.5 + 0.5) * p_size * 0.6 + p_size * 0.4;
+          mask = step(minD, wave);
+          fcol = hsv2rgb(vec3(p_hue, 0.45, 1.0));
+        } else if (style == 5) {
+          // CRT rounded bezel
+          vec2 rd = abs(v_uv - 0.5) - (0.5 - p_size);
+          float rr = length(max(rd, 0.0)) - p_size * 0.3;
+          mask = step(rr, 0.0) * step(minD, p_size);
+          fcol = vec3(0.12, 0.1, 0.18);
+          // subtle shine
+          fcol += vec3(0.3, 0.25, 0.4) * smoothstep(p_size*0.5, 0.0, minD);
+        } else if (style == 6) {
+          // POLAROID (thick bottom, thin sides/top)
+          float botExtra = step(v_uv.y, p_size * 2.5);
+          mask = step(minD, p_size * 0.5) + botExtra;
+          mask = clamp(mask, 0.0, 1.0);
+          fcol = vec3(0.98, 0.95, 0.92);
+        } else {
+          // VHS — tape border with date stamp vibe
+          float inner = step(minD, p_size);
+          float stripe = step(0.5, fract((v_uv.x + v_uv.y) * 20.0));
+          mask = inner;
+          fcol = mix(vec3(0.1, 0.05, 0.15), vec3(0.9, 0.3, 0.5), stripe);
+        }
+
+        gl_FragColor = vec4(mix(orig.rgb, fcol, mask * u_amt), 1.0);
+      }`
+  },
+
+  /* ============ FANCY OVERLAYS ============ */
+  {
+    id: 'rainbow', name: 'RAINBOW CYCLE', cat: 'fancy',
+    params: [
+      {n:'speed', min:0, max:5, def:1.0},
+      {n:'strength', min:0, max:1, def:0.6},
+    ],
+    shader: FX_HEADER + `
+      uniform float p_speed; uniform float p_strength;
+      vec3 hueShift(vec3 c, float h) {
+        const vec3 k = vec3(0.57735);
+        float ca = cos(h*6.2831), sa = sin(h*6.2831);
+        return c*ca + cross(k,c)*sa + k*dot(k,c)*(1.0-ca);
+      }
+      void main() {
+        vec4 c = texture2D(u_tex, v_uv);
+        float shift = u_time * p_speed * 0.15 + v_uv.y * 0.3;
+        c.rgb = hueShift(c.rgb, shift * p_strength * u_amt);
+        gl_FragColor = c;
+      }`
+  },
+  {
+    id: 'matrix', name: 'MATRIX RAIN', cat: 'fancy',
+    params: [
+      {n:'density', min:4, max:40, def:16, step:1},
+      {n:'speed', min:0.1, max:5, def:1.5},
+      {n:'opacity', min:0, max:1, def:0.7},
+    ],
+    shader: FX_HEADER + `
+      uniform float p_density; uniform float p_speed; uniform float p_opacity;
+      float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)))*43758.5); }
+      void main() {
+        vec4 c = texture2D(u_tex, v_uv);
+        // character grid
+        vec2 grid = vec2(p_density, p_density * 1.6);
+        vec2 cell = floor(v_uv * grid);
+        vec2 local = fract(v_uv * grid);
+
+        // drip offset per column
+        float col = cell.x;
+        float t = u_time * p_speed + hash(vec2(col, 0.0)) * 30.0;
+        float drop = mod(t - cell.y * 0.3, grid.y * 0.6) / (grid.y * 0.6);
+        float trail = smoothstep(0.0, 0.3, drop) * smoothstep(1.0, 0.3, drop);
+
+        // random character shape (simple dots/lines)
+        float chRand = hash(cell + floor(t * 4.0));
+        float ch = 0.0;
+        if (local.y > 0.2 && local.y < 0.8) {
+          if (chRand < 0.3) ch = step(0.3, local.x) * step(local.x, 0.7) * step(0.4, fract(local.y*3.0));
+          else if (chRand < 0.6) ch = step(0.4, local.x) * step(local.x, 0.6);
+          else ch = step(0.3, fract(local.x*2.0)) * step(0.3, fract(local.y*2.0));
+        }
+
+        float head = smoothstep(0.9, 1.0, drop);
+        vec3 green = vec3(0.4, 1.0, 0.6);
+        vec3 bright = vec3(0.9, 1.0, 0.95);
+        vec3 matrixCol = mix(green, bright, head) * trail * ch;
+
+        c.rgb = mix(c.rgb, c.rgb * 0.5 + matrixCol, p_opacity * u_amt);
+        gl_FragColor = c;
+      }`
+  },
+  {
+    id: 'ghostmove', name: 'GHOST TRAIL', cat: 'fancy', needPrev: true,
+    params: [
+      {n:'decay', min:0.85, max:0.99, def:0.95},
+      {n:'glow', min:0, max:1, def:0.5},
+      {n:'hue', min:0, max:1, def:0.75},
+    ],
+    shader: FX_HEADER + `
+      uniform sampler2D u_prev;
+      uniform float p_decay; uniform float p_glow; uniform float p_hue;
+      vec3 hsv2rgb(vec3 c){vec4 K=vec4(1.0,2.0/3.0,1.0/3.0,3.0);vec3 p=abs(fract(c.xxx+K.xyz)*6.0-K.www);return c.z*mix(K.xxx,clamp(p-K.xxx,0.0,1.0),c.y);}
+      void main() {
+        vec4 cur = texture2D(u_tex, v_uv);
+        vec4 pre = texture2D(u_prev, v_uv);
+        // motion mask: diff between current and previous
+        float diff = length(cur.rgb - pre.rgb);
+        float motion = smoothstep(0.05, 0.3, diff);
+        // trail: previous frame decayed
+        vec3 trail = pre.rgb * p_decay;
+        // glow color where motion happened
+        vec3 glowCol = hsv2rgb(vec3(p_hue, 0.7, 1.0));
+        vec3 out1 = max(cur.rgb, trail);
+        out1 += glowCol * motion * p_glow;
+        gl_FragColor = vec4(mix(cur.rgb, out1, u_amt), 1.0);
+      }`
+  },
+  {
+    id: 'sparkles', name: 'SPARKLES', cat: 'fancy',
+    params: [
+      {n:'density', min:5, max:60, def:25, step:1},
+      {n:'speed', min:0, max:5, def:1.5},
+      {n:'hue', min:0, max:1, def:0.83},
+    ],
+    shader: FX_HEADER + `
+      uniform float p_density; uniform float p_speed; uniform float p_hue;
+      float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)))*43758.5); }
+      vec3 hsv2rgb(vec3 c){vec4 K=vec4(1.0,2.0/3.0,1.0/3.0,3.0);vec3 p=abs(fract(c.xxx+K.xyz)*6.0-K.www);return c.z*mix(K.xxx,clamp(p-K.xxx,0.0,1.0),c.y);}
+      float sparkle(vec2 uv, vec2 center, float t) {
+        vec2 p = (uv - center);
+        float d = length(p);
+        float cross1 = (1.0 - smoothstep(0.0, 0.003, abs(p.x))) * (1.0 - smoothstep(0.0, 0.02, abs(p.y)));
+        float cross2 = (1.0 - smoothstep(0.0, 0.003, abs(p.y))) * (1.0 - smoothstep(0.0, 0.02, abs(p.x)));
+        float star = (cross1 + cross2) * 0.5;
+        float fade = sin(t * 3.14159) * 0.5 + 0.5;
+        return star * fade;
+      }
+      void main() {
+        vec4 c = texture2D(u_tex, v_uv);
+        vec2 grid = vec2(p_density);
+        vec2 cell = floor(v_uv * grid);
+        float rand1 = hash(cell);
+        float rand2 = hash(cell + 7.7);
+        vec2 pos = (cell + vec2(rand1, rand2)) / grid;
+        float tOff = hash(cell + 3.3) * 6.28;
+        float t = fract(u_time * p_speed * 0.3 + tOff);
+        // only some cells active
+        if (hash(cell + 1.1) > 0.6) {
+          float s = sparkle(v_uv, pos, t);
+          vec3 scol = hsv2rgb(vec3(p_hue + rand1 * 0.2, 0.3, 1.0));
+          c.rgb += scol * s * u_amt;
+        }
+        gl_FragColor = c;
+      }`
+  },
+  {
+    id: 'lightning', name: 'LIGHTNING', cat: 'fancy',
+    params: [
+      {n:'freq', min:0.2, max:5, def:1.5},
+      {n:'branches', min:1, max:8, def:3, step:1},
+      {n:'intensity', min:0, max:1, def:0.8},
+    ],
+    shader: FX_HEADER + `
+      uniform float p_freq; uniform float p_branches; uniform float p_intensity;
+      float hash(float n){ return fract(sin(n)*43758.5); }
+      float hash2(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)))*43758.5); }
+      float bolt(vec2 uv, float seed, float t) {
+        // strike period
+        float phase = floor(t * p_freq + seed);
+        float localT = fract(t * p_freq + seed);
+        // only visible for brief flash
+        float flash = (1.0 - localT) * step(localT, 0.15);
+        if (flash < 0.01) return 0.0;
+        // vertical zigzag path
+        float startX = hash(phase + seed) * 0.8 + 0.1;
+        float x = startX;
+        float wantedX = startX;
+        float y = uv.y;
+        // approx x at this height using noisy seed
+        for (int i = 0; i < 8; i++) {
+          float seg = float(i) / 8.0;
+          if (y > seg) {
+            float wiggle = (hash(phase + seed + seg * 13.0) - 0.5) * 0.3;
+            wantedX += wiggle * 0.4;
+          }
+        }
+        float d = abs(uv.x - wantedX);
+        float core = exp(-d * 250.0);
+        float glow = exp(-d * 30.0) * 0.3;
+        return (core + glow) * flash;
+      }
+      void main() {
+        vec4 c = texture2D(u_tex, v_uv);
+        float total = 0.0;
+        float nb = floor(p_branches + 0.5);
+        for (int i = 0; i < 8; i++) {
+          if (float(i) >= nb) break;
+          total += bolt(v_uv, float(i) * 7.13, u_time);
+        }
+        vec3 bolt_col = vec3(0.9, 0.95, 1.0);
+        c.rgb += bolt_col * total * p_intensity * u_amt;
+        // brief full-screen flash on strikes
+        float flashPulse = 0.0;
+        for (int i = 0; i < 8; i++) {
+          if (float(i) >= nb) break;
+          float phase = floor(u_time * p_freq + float(i) * 7.13);
+          float localT = fract(u_time * p_freq + float(i) * 7.13);
+          flashPulse = max(flashPulse, (1.0 - localT) * step(localT, 0.08));
+        }
+        c.rgb += vec3(0.1, 0.1, 0.15) * flashPulse * p_intensity * u_amt;
+        gl_FragColor = c;
+      }`
+  },
+  {
+    id: 'hearts', name: 'FLOATING HEARTS', cat: 'fancy',
+    params: [
+      {n:'count', min:3, max:30, def:12, step:1},
+      {n:'speed', min:0.1, max:3, def:0.8},
+      {n:'size', min:0.02, max:0.15, def:0.05},
+      {n:'hue', min:0, max:1, def:0.92},
+    ],
+    shader: FX_HEADER + `
+      uniform float p_count; uniform float p_speed; uniform float p_size; uniform float p_hue;
+      float hash(float n){ return fract(sin(n)*43758.5); }
+      vec3 hsv2rgb(vec3 c){vec4 K=vec4(1.0,2.0/3.0,1.0/3.0,3.0);vec3 p=abs(fract(c.xxx+K.xyz)*6.0-K.www);return c.z*mix(K.xxx,clamp(p-K.xxx,0.0,1.0),c.y);}
+      float heart(vec2 p) {
+        p.y -= 0.1;
+        float a = atan(p.x, p.y)/3.14159;
+        float r = length(p);
+        float h = abs(a);
+        return (13.0*h - 22.0*h*h + 10.0*h*h*h)/(6.0-5.0*h) - r;
+      }
+      void main() {
+        vec4 c = texture2D(u_tex, v_uv);
+        vec3 acc = vec3(0.0);
+        float nb = floor(p_count + 0.5);
+        for (int i = 0; i < 30; i++) {
+          if (float(i) >= nb) break;
+          float fi = float(i);
+          float x = hash(fi * 3.17) * 0.9 + 0.05;
+          float phase = fract(u_time * p_speed * 0.1 + hash(fi * 7.7));
+          float y = 1.0 - phase;
+          // slight horizontal sway
+          x += sin(u_time + fi) * 0.03;
+          vec2 p = (v_uv - vec2(x, y)) / p_size;
+          float h = heart(p);
+          if (h > 0.0) {
+            float fade = sin(phase * 3.14159);
+            vec3 col = hsv2rgb(vec3(p_hue + hash(fi)*0.1, 0.5, 1.0));
+            acc += col * fade * smoothstep(0.0, 0.05, h);
+          }
+        }
+        c.rgb += acc * u_amt;
+        gl_FragColor = c;
+      }`
+  },
+];
+const CATS = [
+  { id: 'presets', name: 'MY PRESETS' },
+  { id: 'audio', name: 'AUDIO' },
+  { id: 'framing', name: 'FRAME' },
+  { id: 'color', name: 'COLOR' },
+  { id: 'distort', name: 'DISTORT' },
+  { id: 'glitch', name: 'GLITCH' },
+  { id: 'feedback', name: 'TRAILS' },
+  { id: 'art', name: 'ART' },
+  { id: 'fancy', name: 'FANCY' },
+];
+
+/* =========================================================================
+   GL setup
+   ========================================================================= */
+
+const quad = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, quad);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
+
+/* compile all FX shader programs */
+const fxPrograms = {};
+for (const fx of FX) {
+  try {
+    fxPrograms[fx.id] = program(VS, fx.shader);
+  } catch (e) {
+    console.error('Failed FX', fx.id, e);
+  }
+}
+const passProgram = program(VS, F_PASS);
+const chromaBlendProgram = program(VS, F_CHROMA_BLEND);
+
+/* video texture */
+const videoTex = gl.createTexture();
+gl.bindTexture(gl.TEXTURE_2D, videoTex);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+
+/* ping-pong FBOs */
+function makeFBO(w, h) {
+  const tex = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  const fb = gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  return { tex, fb, w, h };
+}
+
+let fboA, fboB, fboC, fboPrev;
+let fboW = 0, fboH = 0;
+
+function ensureFBOs(w, h) {
+  if (fboA && fboA.w === w && fboA.h === h) return;
+  if (fboA) { gl.deleteTexture(fboA.tex); gl.deleteFramebuffer(fboA.fb); }
+  if (fboB) { gl.deleteTexture(fboB.tex); gl.deleteFramebuffer(fboB.fb); }
+  if (fboC) { gl.deleteTexture(fboC.tex); gl.deleteFramebuffer(fboC.fb); }
+  if (fboPrev) { gl.deleteTexture(fboPrev.tex); gl.deleteFramebuffer(fboPrev.fb); }
+  fboA = makeFBO(w, h);
+  fboB = makeFBO(w, h);
+  fboC = makeFBO(w, h);
+  fboPrev = makeFBO(w, h);
+  fboW = w; fboH = h;
+}
+
+/* =========================================================================
+   STATE
+   ========================================================================= */
+const state = {
+  activeFX: {},   // id => { on, amt, params: {name: val}}
+  facing: 'user',
+  stream: null,
+  recording: false,
+  recorder: null,
+  recChunks: [],
+  recStart: 0,
+  lastBlob: null,
+  lastBlobURL: null,
+  uiHidden: false,
+};
+
+for (const fx of FX) {
+  const params = {};
+  for (const p of fx.params) params[p.n] = p.def;
+  state.activeFX[fx.id] = {
+    on: false, amt: 1.0, params,
+    chroma: { mode: 0, color: [0.0, 1.0, 0.0], thresh: 0.35, soft: 0.15, invert: 0 }
+  };
+}
+
+/* =========================================================================
+   UI BUILD
+   ========================================================================= */
+function buildUI() {
+  const tabs = $('tabs');
+  const wrap = $('panel-wrap');
+  tabs.innerHTML = ''; wrap.innerHTML = '';
+
+  for (const cat of CATS) {
+    const tab = document.createElement('button');
+    tab.className = 'tab';
+    tab.dataset.cat = cat.id;
+    tab.innerHTML = `${cat.name}<span class="dot"></span>`;
+    tab.onclick = () => selectTab(cat.id);
+    tabs.appendChild(tab);
+
+    const panel = document.createElement('div');
+    panel.className = 'panel';
+    panel.dataset.cat = cat.id;
+
+    if (cat.id === 'audio') {
+      buildAudioPanel(panel);
+      wrap.appendChild(panel);
+      continue;
+    }
+    if (cat.id === 'presets') {
+      buildPresetsPanel(panel);
+      wrap.appendChild(panel);
+      continue;
+    }
+
+    const catFX = FX.filter(f => f.cat === cat.id);
+    for (const fx of catFX) {
+      const tile = document.createElement('div');
+      tile.className = 'fx';
+      tile.dataset.id = fx.id;
+
+      const head = document.createElement('div');
+      head.className = 'fx-head';
+      const name = document.createElement('div');
+      name.className = 'fx-name';
+      name.textContent = fx.name;
+      const toggle = document.createElement('div');
+      toggle.className = 'toggle';
+      toggle.onclick = (e) => {
+        e.stopPropagation();
+        toggleFX(fx.id);
+      };
+      head.appendChild(name);
+      head.appendChild(toggle);
+      head.onclick = () => tile.classList.toggle('open');
+      tile.appendChild(head);
+
+      const body = document.createElement('div');
+      body.className = 'fx-body';
+      for (const p of fx.params) {
+        const row = document.createElement('div');
+        row.className = 'slider-row';
+        const lbl = document.createElement('div');
+        lbl.className = 'slider-label';
+        lbl.textContent = p.n;
+        const sld = document.createElement('input');
+        sld.type = 'range';
+        sld.min = p.min; sld.max = p.max;
+        sld.step = p.step || ((p.max-p.min)/100);
+        sld.value = p.def;
+        sld.oninput = () => {
+          state.activeFX[fx.id].params[p.n] = parseFloat(sld.value);
+          val.textContent = formatVal(sld.value, p);
+        };
+        const val = document.createElement('div');
+        val.className = 'slider-val';
+        val.textContent = formatVal(p.def, p);
+        row.appendChild(lbl);
+        row.appendChild(sld);
+        row.appendChild(val);
+        body.appendChild(row);
+      }
+      /* master amount */
+      const mrow = document.createElement('div');
+      mrow.className = 'slider-row';
+      const mlbl = document.createElement('div');
+      mlbl.className = 'slider-label';
+      mlbl.textContent = 'MIX';
+      mlbl.style.color = 'var(--pink)';
+      const mm = document.createElement('input');
+      mm.type = 'range'; mm.min = 0; mm.max = 1; mm.step = 0.01; mm.value = 1;
+      mm.oninput = () => { state.activeFX[fx.id].amt = parseFloat(mm.value); mval.textContent = Math.round(mm.value*100)+'%'; };
+      const mval = document.createElement('div');
+      mval.className = 'slider-val';
+      mval.textContent = '100%';
+      mval.style.color = 'var(--pink)';
+      mrow.appendChild(mlbl); mrow.appendChild(mm); mrow.appendChild(mval);
+      body.appendChild(mrow);
+
+      /* CHROMA KEY button */
+      const ckRow = document.createElement('div');
+      ckRow.className = 'slider-row';
+      ckRow.style.marginTop = '6px';
+      const ckBtn = document.createElement('button');
+      ckBtn.className = 'chroma-btn';
+      ckBtn.dataset.fxid = fx.id;
+      const ckSwatch = document.createElement('span');
+      ckSwatch.className = 'ck-swatch-mini';
+      const ckst = state.activeFX[fx.id].chroma;
+      ckSwatch.style.background = `rgb(${Math.round(ckst.color[0]*255)},${Math.round(ckst.color[1]*255)},${Math.round(ckst.color[2]*255)})`;
+      ckBtn.appendChild(ckSwatch);
+      const ckLabel = document.createElement('span');
+      ckLabel.textContent = ckst.mode > 0 ? (ckst.mode === 1 ? 'CHROMA: ONLY' : 'CHROMA: EXCEPT') : 'CHROMA: OFF';
+      ckBtn.appendChild(ckLabel);
+      ckBtn.onclick = (e) => {
+        e.stopPropagation();
+        openChromaModal(fx.id);
+      };
+      ckRow.appendChild(ckBtn);
+      body.appendChild(ckRow);
+
+      tile.appendChild(body);
+      panel.appendChild(tile);
+    }
+    wrap.appendChild(panel);
+  }
+  selectTab('presets');
+}
+
+function buildAudioPanel(panel) {
+  /* Top bar: mic status + mute */
+  const header = document.createElement('div');
+  header.className = 'audio-header';
+  header.innerHTML = `
+    <div class="audio-status">
+      <div class="mic-meter"><div class="mic-meter-fill" id="micMeterFill"></div></div>
+      <div class="mic-status-label" id="micStatusLabel">MIC LIVE</div>
+    </div>
+    <button class="mini-btn" id="micMuteBtn">MUTE MIC</button>
+  `;
+  panel.appendChild(header);
+
+  // defer handler wiring until appended
+  setTimeout(() => {
+    const mb = $('micMuteBtn');
+    if (mb) mb.onclick = () => {
+      setMicMuted(!audio.micMuted);
+      mb.textContent = audio.micMuted ? 'UNMUTE MIC' : 'MUTE MIC';
+      mb.classList.toggle('warn', audio.micMuted);
+      $('micStatusLabel').textContent = audio.micMuted ? 'MIC MUTED' : 'MIC LIVE';
+    };
+    startMicMeter();
+  }, 0);
+
+  for (const afx of AUDIO_FX) {
+    const tile = document.createElement('div');
+    tile.className = 'fx';
+    tile.dataset.id = 'aud_' + afx.id;
+
+    const head = document.createElement('div');
+    head.className = 'fx-head';
+    const name = document.createElement('div');
+    name.className = 'fx-name';
+    name.textContent = afx.name;
+    if (afx.badge === 'pro') {
+      const b = document.createElement('span');
+      b.className = 'fx-badge';
+      b.textContent = 'PRO';
+      name.appendChild(b);
+    }
+    const toggle = document.createElement('div');
+    toggle.className = 'toggle';
+    toggle.onclick = (e) => {
+      e.stopPropagation();
+      toggleAudioFX(afx.id);
+      tile.classList.toggle('on', state.audioFX[afx.id].on);
+      toggle.classList.toggle('on', state.audioFX[afx.id].on);
+      if (state.audioFX[afx.id].on) tile.classList.add('open');
+      updateAudioCount();
+    };
+    head.appendChild(name); head.appendChild(toggle);
+    head.onclick = () => tile.classList.toggle('open');
+    tile.appendChild(head);
+
+    const body = document.createElement('div');
+    body.className = 'fx-body';
+
+    // params
+    const sliderRefs = {};
+    for (const p of afx.params) {
+      const row = document.createElement('div');
+      row.className = 'slider-row';
+      const lbl = document.createElement('div');
+      lbl.className = 'slider-label';
+      lbl.textContent = p.n;
+      const sld = document.createElement('input');
+      sld.type = 'range';
+      sld.min = p.min; sld.max = p.max;
+      sld.step = p.step || ((p.max - p.min) / 100);
+      sld.value = state.audioFX[afx.id].params[p.n];
+      const val = document.createElement('div');
+      val.className = 'slider-val';
+      const fmt = (v) => {
+        if (p.labels) return p.labels[Math.round(v)] || String(v);
+        if (p.step && p.step >= 1) return String(Math.round(v));
+        if (Math.abs(v) >= 10) return (+v).toFixed(1);
+        return (+v).toFixed(2);
+      };
+      val.textContent = fmt(sld.value);
+      sld.oninput = () => {
+        const v = parseFloat(sld.value);
+        setAudioFXParam(afx.id, p.n, v);
+        val.textContent = fmt(v);
+      };
+      row.appendChild(lbl); row.appendChild(sld); row.appendChild(val);
+      body.appendChild(row);
+      sliderRefs[p.n] = { sld, val, fmt };
+    }
+
+    // refresh fn so preset changes can update sliders
+    state.audioFX[afx.id]._refreshUI = () => {
+      for (const p of afx.params) {
+        const r = sliderRefs[p.n];
+        if (!r) continue;
+        r.sld.value = state.audioFX[afx.id].params[p.n];
+        r.val.textContent = r.fmt(state.audioFX[afx.id].params[p.n]);
+      }
+    };
+
+    tile.appendChild(body);
+    panel.appendChild(tile);
+  }
+}
+
+function updateAudioCount() {
+  const active = AUDIO_FX.filter(a => state.audioFX[a.id].on);
+  const tab = document.querySelector(`.tab[data-cat="audio"]`);
+  if (tab) tab.classList.toggle('has-active', active.length > 0);
+  if (typeof refreshPresetSummary === 'function') refreshPresetSummary();
+}
+
+/* =========================================================================
+   PRESETS — save/load full fx+audio state to localStorage
+   ========================================================================= */
+const PRESETS_KEY = 'livefx_presets_v1';
+
+function loadPresets() {
+  try {
+    const raw = localStorage.getItem(PRESETS_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch { return []; }
+}
+function savePresets(arr) {
+  try { localStorage.setItem(PRESETS_KEY, JSON.stringify(arr)); } catch {}
+}
+
+function snapshotCurrentState() {
+  const snap = { version: 1, timestamp: Date.now(), fx: {}, audioFX: {} };
+  for (const fx of FX) {
+    const st = state.activeFX[fx.id];
+    snap.fx[fx.id] = {
+      on: st.on,
+      amt: st.amt,
+      params: { ...st.params },
+      chroma: { ...st.chroma, color: [...st.chroma.color] },
+    };
+  }
+  for (const afx of AUDIO_FX) {
+    const st = state.audioFX[afx.id];
+    snap.audioFX[afx.id] = {
+      on: st.on,
+      params: { ...st.params },
+    };
+  }
+  return snap;
+}
+
+function applyPreset(snap) {
+  // video FX
+  for (const fx of FX) {
+    const saved = snap.fx && snap.fx[fx.id];
+    const st = state.activeFX[fx.id];
+    if (saved) {
+      st.on = !!saved.on;
+      st.amt = Number.isFinite(saved.amt) ? saved.amt : 1.0;
+      if (saved.params) {
+        for (const p of fx.params) {
+          if (Number.isFinite(saved.params[p.n])) st.params[p.n] = saved.params[p.n];
+        }
+      }
+      if (saved.chroma) {
+        st.chroma.mode = saved.chroma.mode || 0;
+        st.chroma.thresh = Number.isFinite(saved.chroma.thresh) ? saved.chroma.thresh : 0.35;
+        st.chroma.soft = Number.isFinite(saved.chroma.soft) ? saved.chroma.soft : 0.15;
+        st.chroma.invert = saved.chroma.invert || 0;
+        if (Array.isArray(saved.chroma.color) && saved.chroma.color.length === 3) {
+          st.chroma.color = [...saved.chroma.color];
+        }
+      }
+    } else {
+      // reset
+      st.on = false;
+      st.amt = 1.0;
+      for (const p of fx.params) st.params[p.n] = p.def;
+    }
+  }
+  // audio FX
+  for (const afx of AUDIO_FX) {
+    const saved = snap.audioFX && snap.audioFX[afx.id];
+    const st = state.audioFX[afx.id];
+    if (saved) {
+      st.on = !!saved.on;
+      if (saved.params) {
+        for (const p of afx.params) {
+          if (Number.isFinite(saved.params[p.n])) st.params[p.n] = saved.params[p.n];
+        }
+      }
+    } else {
+      st.on = false;
+      for (const p of afx.params) st.params[p.n] = p.def;
+    }
+  }
+  // full UI rebuild to reflect new state
+  buildUI();
+  updateFXCount();
+  updateAudioCount();
+  // rebuild audio chain to match
+  rebuildAudioChain();
+}
+
+function buildPresetsPanel(panel) {
+  // save current row
+  const saveBox = document.createElement('div');
+  saveBox.className = 'preset-save-box';
+  saveBox.innerHTML = `
+    <div class="preset-section-label">◆ SAVE CURRENT VIBE ◆</div>
+    <div class="preset-save-row">
+      <input type="text" class="preset-name-input" id="presetNameInput" placeholder="name your vibe..." maxlength="32">
+      <button class="mini-btn preset-save-btn" id="presetSaveBtn">SAVE</button>
+    </div>
+    <div class="preset-summary" id="presetSummary"></div>
+  `;
+  panel.appendChild(saveBox);
+
+  // list container
+  const listWrap = document.createElement('div');
+  listWrap.className = 'preset-list-wrap';
+  listWrap.innerHTML = `<div class="preset-section-label">◆ SAVED PRESETS ◆</div><div class="preset-list" id="presetList"></div>`;
+  panel.appendChild(listWrap);
+
+  setTimeout(() => {
+    renderPresetList();
+    refreshPresetSummary();
+    const input = $('presetNameInput');
+    const btn = $('presetSaveBtn');
+    if (btn) btn.onclick = () => {
+      const name = (input.value || '').trim() || `VIBE ${new Date().toLocaleString()}`;
+      const presets = loadPresets();
+      presets.push({
+        id: 'p_' + Date.now().toString(36),
+        name,
+        data: snapshotCurrentState(),
+      });
+      savePresets(presets);
+      input.value = '';
+      renderPresetList();
+      toast('PRESET SAVED');
+    };
+  }, 0);
+}
+
+function refreshPresetSummary() {
+  const el = $('presetSummary');
+  if (!el) return;
+  const vFx = FX.filter(f => state.activeFX[f.id].on).length;
+  const aFx = AUDIO_FX.filter(a => state.audioFX[a.id].on).length;
+  el.textContent = `${vFx} video fx · ${aFx} audio fx active`;
+}
+
+function renderPresetList() {
+  const list = $('presetList');
+  if (!list) return;
+  const presets = loadPresets();
+  list.innerHTML = '';
+  if (presets.length === 0) {
+    list.innerHTML = '<div class="preset-empty">no saved vibes yet ~ save one above!</div>';
+    return;
+  }
+  presets.slice().reverse().forEach(p => {
+    const row = document.createElement('div');
+    row.className = 'preset-row';
+    const vFx = p.data.fx ? Object.values(p.data.fx).filter(f => f.on).length : 0;
+    const aFx = p.data.audioFX ? Object.values(p.data.audioFX).filter(f => f.on).length : 0;
+    const dateStr = new Date(p.data.timestamp).toLocaleDateString();
+    row.innerHTML = `
+      <div class="preset-info">
+        <div class="preset-name">${escapeHTML(p.name)}</div>
+        <div class="preset-meta">${vFx} vfx · ${aFx} afx · ${dateStr}</div>
+      </div>
+      <div class="preset-actions">
+        <button class="mini-btn preset-load-btn">LOAD</button>
+        <button class="mini-btn warn preset-del-btn">×</button>
+      </div>
+    `;
+    row.querySelector('.preset-load-btn').onclick = () => {
+      applyPreset(p.data);
+      // stay on presets tab so user can keep browsing, but show toast
+      toast('PRESET LOADED: ' + p.name);
+      refreshPresetSummary();
+    };
+    row.querySelector('.preset-del-btn').onclick = () => {
+      if (!confirm('Delete "' + p.name + '"?')) return;
+      const ps = loadPresets().filter(x => x.id !== p.id);
+      savePresets(ps);
+      renderPresetList();
+      toast('DELETED');
+    };
+    list.appendChild(row);
+  });
+}
+
+function escapeHTML(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+let micMeterStarted = false;
+function startMicMeter() {
+  if (micMeterStarted) return;
+  micMeterStarted = true;
+  const buf = new Uint8Array(128);
+  function tick() {
+    requestAnimationFrame(tick);
+    if (!audio.analyser) return;
+    audio.analyser.getByteTimeDomainData(buf);
+    let peak = 0;
+    for (let i = 0; i < buf.length; i++) {
+      const v = Math.abs(buf[i] - 128) / 128;
+      if (v > peak) peak = v;
+    }
+    const fill = $('micMeterFill');
+    if (fill) fill.style.width = Math.min(100, peak * 200) + '%';
+  }
+  tick();
+}
+
+function refreshChromaButton(fxId) {
+  const btn = document.querySelector(`.chroma-btn[data-fxid="${fxId}"]`);
+  if (!btn) return;
+  const ck = state.activeFX[fxId].chroma;
+  const sw = btn.querySelector('.ck-swatch-mini');
+  sw.style.background = `rgb(${Math.round(ck.color[0]*255)},${Math.round(ck.color[1]*255)},${Math.round(ck.color[2]*255)})`;
+  const lbl = btn.querySelector('span:last-child');
+  lbl.textContent = ck.mode > 0 ? (ck.mode === 1 ? 'CHROMA: ONLY' : 'CHROMA: EXCEPT') : 'CHROMA: OFF';
+  btn.classList.toggle('active', ck.mode > 0);
+}
+
+function formatVal(v, p) {
+  v = parseFloat(v);
+  if (p.step && p.step >= 1) return String(Math.round(v));
+  if (Math.abs(v) < 0.01 && v !== 0) return v.toExponential(1);
+  if (Math.abs(v) >= 10) return v.toFixed(1);
+  return v.toFixed(2);
+}
+
+function selectTab(cat) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.cat === cat));
+  document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.dataset.cat === cat));
+}
+
+function toggleFX(id) {
+  const tile = document.querySelector(`.fx[data-id="${id}"]`);
+  const tog = tile.querySelector('.toggle');
+  state.activeFX[id].on = !state.activeFX[id].on;
+  tile.classList.toggle('on', state.activeFX[id].on);
+  tog.classList.toggle('on', state.activeFX[id].on);
+  if (state.activeFX[id].on) tile.classList.add('open');
+  updateFXCount();
+}
+
+function updateFXCount() {
+  const active = FX.filter(f => state.activeFX[f.id].on);
+  $('fxCount').textContent = `${active.length} FX ACTIVE`;
+  for (const cat of CATS) {
+    const tab = document.querySelector(`.tab[data-cat="${cat.id}"]`);
+    const any = active.some(f => f.cat === cat.id);
+    if (tab) tab.classList.toggle('has-active', any);
+  }
+  if (typeof refreshPresetSummary === 'function') refreshPresetSummary();
+}
+
+/* =========================================================================
+   CAMERA
+   ========================================================================= */
+async function startCamera() {
+  if (state.stream) {
+    state.stream.getTracks().forEach(t => t.stop());
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: state.facing,
+        width:  { ideal: 1280 },
+        height: { ideal: 720 },
+      },
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      },
+    });
+    state.stream = stream;
+    video.srcObject = stream;
+    await video.play();
+    setupAudioGraph(stream);
+  } catch (e) {
+    alert('Camera failed: ' + e.message);
+    throw e;
+  }
+}
+
+/* =========================================================================
+   AUDIO SYSTEM — professional voice FX rack
+   Graph: micSource -> [gate] -> [eachFXnode chain in order] -> masterGain -> destination
+   We build the FX chain dynamically when any audio FX toggles.
+   ========================================================================= */
+
+const audio = {
+  ctx: null,
+  micStream: null,
+  micSource: null,
+  masterGain: null,
+  destination: null,      // MediaStreamDestination for recording
+  analyser: null,
+  micMuted: false,
+  fxChain: [],             // current ordered array of { id, inNode, outNode, cleanup? }
+  lastSourceNode: null,    // last node in chain before master
+};
+
+/* AUDIO_FX — each defines: id, name, params, build(ctx, params, state) -> {in, out, set(paramName, value)}
+   All audio FX are "stompbox" style: input -> output. We chain them in order. */
+
+const AUDIO_FX = [
+
+  /* ---------- PROFESSIONAL REVERB ---------- */
+  {
+    id: 'reverb', name: 'REVERB', badge: 'pro',
+    params: [
+      {n:'preset',    min:0, max:6, def:2, step:1, labels:['ROOM','HALL','CATHEDRAL','PLATE','SPRING','SHIMMER','SPACE']},
+      {n:'size',      min:0.1, max:1, def:0.7},
+      {n:'decay',     min:0.1, max:10, def:3.5},
+      {n:'damping',   min:0, max:1, def:0.4},
+      {n:'predelay',  min:0, max:0.2, def:0.02},
+      {n:'modDepth',  min:0, max:1, def:0.3},
+      {n:'modRate',   min:0.1, max:5, def:0.8},
+      {n:'width',     min:0, max:1, def:1.0},
+      {n:'wet',       min:0, max:1, def:0.45},
+    ],
+    build(ctx, p, s) {
+      /* Schroeder-Moorer hybrid:
+         input -> predelay -> [early reflections] + [late tail: 8 parallel combs -> 4 series allpass]
+         + damping (lowpass inside comb feedback), + LFO modulation on comb delays for shimmer,
+         stereo width via L/R differing delays. */
+      const input = ctx.createGain();
+      const output = ctx.createGain();
+      const dry = ctx.createGain();
+      const wet = ctx.createGain();
+      input.connect(dry); dry.connect(output);
+
+      const preDelay = ctx.createDelay(0.5);
+
+      /* Early reflections: tapped delay network */
+      const earlyTaps = [
+        {d:0.0043,g:0.5}, {d:0.0089,g:0.45}, {d:0.0131,g:0.4},
+        {d:0.0194,g:0.35},{d:0.0253,g:0.3}, {d:0.0329,g:0.28},
+      ];
+      const earlyMerger = ctx.createGain();
+      earlyMerger.gain.value = 0.35;
+      earlyTaps.forEach(t => {
+        const d = ctx.createDelay(0.5); d.delayTime.value = t.d;
+        const g = ctx.createGain(); g.gain.value = t.g;
+        preDelay.connect(d); d.connect(g); g.connect(earlyMerger);
+      });
+
+      /* Late reverb: 8 parallel comb filters with damping in feedback loop */
+      // delays in seconds (mutually prime, golden ratio-ish for dense tail)
+      const combDelays = [0.0297, 0.0371, 0.0411, 0.0437, 0.0051, 0.0061, 0.0075, 0.0089]
+        .map(d => d * 2.0); // scale later
+      const combSum = ctx.createGain();
+      combSum.gain.value = 1/8;
+      const combs = [];
+      for (let i = 0; i < 8; i++) {
+        const comb = ctx.createDelay(1.0);
+        const fb = ctx.createGain();
+        const damp = ctx.createBiquadFilter();
+        damp.type = 'lowpass';
+        damp.Q.value = 0.3;
+        // LFO for modulation (subtle pitch shimmer)
+        const lfo = ctx.createOscillator();
+        const lfoGain = ctx.createGain();
+        lfo.type = 'sine';
+        lfoGain.gain.value = 0;
+        lfo.connect(lfoGain); lfoGain.connect(comb.delayTime);
+        lfo.start();
+        // wiring: preDelay -> comb -> damp -> fb -> back to comb ; comb -> combSum
+        preDelay.connect(comb);
+        comb.connect(damp); damp.connect(fb); fb.connect(comb);
+        comb.connect(combSum);
+        combs.push({comb, fb, damp, lfo, lfoGain, baseDelay: combDelays[i]});
+      }
+
+      /* Series of 4 allpass filters for diffusion */
+      const allpasses = [];
+      let apSrc = combSum;
+      const apDelays = [0.005, 0.0017, 0.0013, 0.00097];
+      const apGains = [0.7, 0.68, 0.66, 0.64];
+      for (let i = 0; i < 4; i++) {
+        const ap = ctx.createDelay(0.05); ap.delayTime.value = apDelays[i];
+        const fb = ctx.createGain(); fb.gain.value = apGains[i];
+        const ff = ctx.createGain(); ff.gain.value = -apGains[i];
+        const sum = ctx.createGain();
+        // allpass approximation: y = -g*x + d + g*y_prev (first-order Schroeder)
+        apSrc.connect(ff); ff.connect(sum);
+        apSrc.connect(ap); ap.connect(sum);
+        ap.connect(fb); fb.connect(ap);
+        allpasses.push({ap, fb, ff});
+        apSrc = sum;
+      }
+
+      /* Stereo splitter for width: duplicate with small delay on R */
+      const splitter = ctx.createGain();
+      apSrc.connect(splitter);
+      const leftDelay = ctx.createDelay(0.05); leftDelay.delayTime.value = 0.003;
+      const rightDelay = ctx.createDelay(0.05); rightDelay.delayTime.value = 0.011;
+      const merger = ctx.createChannelMerger(2);
+      splitter.connect(leftDelay); leftDelay.connect(merger, 0, 0);
+      splitter.connect(rightDelay); rightDelay.connect(merger, 0, 1);
+
+      /* wet path: early + late */
+      earlyMerger.connect(wet);
+      merger.connect(wet);
+
+      /* input -> preDelay; wet -> output */
+      input.connect(preDelay);
+      wet.connect(output);
+
+      const obj = { in: input, out: output, wetNode: wet, dryNode: dry };
+
+      // presets
+      const presets = {
+        0: {size:0.35, decay:1.2, damping:0.5, predelay:0.005, modDepth:0.1, modRate:0.5, width:0.6, wet:0.3},   // ROOM
+        1: {size:0.75, decay:3.5, damping:0.35, predelay:0.02, modDepth:0.3, modRate:0.7, width:1.0, wet:0.45},  // HALL
+        2: {size:1.0,  decay:7.5, damping:0.25, predelay:0.05, modDepth:0.4, modRate:0.5, width:1.0, wet:0.5},   // CATHEDRAL
+        3: {size:0.6,  decay:2.2, damping:0.15, predelay:0.005, modDepth:0.2, modRate:1.2, width:0.9, wet:0.4},  // PLATE
+        4: {size:0.25, decay:1.8, damping:0.8, predelay:0.0, modDepth:0.8, modRate:3.0, width:0.5, wet:0.4},     // SPRING
+        5: {size:0.85, decay:6.0, damping:0.2, predelay:0.03, modDepth:0.6, modRate:0.6, width:1.0, wet:0.55},   // SHIMMER
+        6: {size:1.0,  decay:9.5, damping:0.1, predelay:0.08, modDepth:0.5, modRate:0.3, width:1.0, wet:0.6},    // SPACE
+      };
+
+      function applyAll(params) {
+        // preset overrides other params only on preset-change, not every frame
+        const size = Number.isFinite(params.size) ? params.size : 0.7;
+        const decay = Number.isFinite(params.decay) ? params.decay : 3.5;
+        const damping = Number.isFinite(params.damping) ? params.damping : 0.4;
+        const modDepth = Number.isFinite(params.modDepth) ? params.modDepth : 0.3;
+        const modRate = Number.isFinite(params.modRate) ? params.modRate : 0.8;
+        const predelay = Number.isFinite(params.predelay) ? params.predelay : 0.02;
+        const width = Number.isFinite(params.width) ? params.width : 1.0;
+        const wetAmt = Number.isFinite(params.wet) ? params.wet : 0.45;
+        // comb delay scaling: bigger size = longer delays = bigger "room"
+        combs.forEach((c, i) => {
+          const target = c.baseDelay * (0.5 + size * 1.5);
+          c.comb.delayTime.setTargetAtTime(target, ctx.currentTime, 0.05);
+          // feedback: higher decay = feedback closer to 1. Use RT60 formula: fb = 10^(-3 * delay / rt60)
+          const fb = Math.min(0.95, Math.max(0, Math.pow(10, -3 * target / Math.max(0.1, decay))));
+          c.fb.gain.setTargetAtTime(fb, ctx.currentTime, 0.05);
+          // damping: lowpass freq in feedback
+          const freq = 200 + (1 - damping) * 18000;
+          c.damp.frequency.setTargetAtTime(freq, ctx.currentTime, 0.05);
+          // modulation
+          c.lfo.frequency.setTargetAtTime(Math.max(0.01, modRate * (0.8 + i * 0.05)), ctx.currentTime, 0.05);
+          c.lfoGain.gain.setTargetAtTime(modDepth * 0.001, ctx.currentTime, 0.05);
+        });
+        preDelay.delayTime.setTargetAtTime(Math.max(0, predelay), ctx.currentTime, 0.02);
+        // stereo width
+        rightDelay.delayTime.setTargetAtTime(width * 0.013, ctx.currentTime, 0.02);
+        leftDelay.delayTime.setTargetAtTime(width * 0.003, ctx.currentTime, 0.02);
+        // wet/dry
+        wet.gain.setTargetAtTime(wetAmt, ctx.currentTime, 0.02);
+        dry.gain.setTargetAtTime(1 - wetAmt * 0.5, ctx.currentTime, 0.02);
+      }
+
+      let lastPreset = -1;
+      obj.set = (name, value, allParams) => {
+        if (name === 'preset') {
+          const idx = Math.round(value);
+          if (idx !== lastPreset && presets[idx]) {
+            lastPreset = idx;
+            const pr = presets[idx];
+            // push preset values into state.audioFX params AND sliders
+            if (s && s.params) {
+              Object.keys(pr).forEach(k => { s.params[k] = pr[k]; });
+              // trigger UI refresh
+              if (s._refreshUI) s._refreshUI();
+            }
+            applyAll(pr);
+            return;
+          }
+        }
+        // any single-param change: apply all (cheap)
+        if (allParams) applyAll(allParams);
+      };
+      return obj;
+    }
+  },
+
+  /* ---------- PITCH SHIFT (granular) ---------- */
+  {
+    id: 'pitch', name: 'PITCH SHIFT',
+    params: [
+      {n:'semitones', min:-24, max:24, def:0, step:1},
+      {n:'mix', min:0, max:1, def:1.0},
+    ],
+    build(ctx, p, s) {
+      /* Granular pitch shifter using two overlapping delay lines with sawtooth LFOs */
+      const input = ctx.createGain();
+      const output = ctx.createGain();
+      const dry = ctx.createGain();
+      const wet = ctx.createGain();
+      input.connect(dry); dry.connect(output);
+
+      const grainSize = 0.08; // 80ms grains
+      const a = ctx.createDelay(0.5);
+      const b = ctx.createDelay(0.5);
+      const aGain = ctx.createGain(); aGain.gain.value = 0;
+      const bGain = ctx.createGain(); bGain.gain.value = 0;
+
+      input.connect(a); input.connect(b);
+      a.connect(aGain); b.connect(bGain);
+      aGain.connect(wet); bGain.connect(wet);
+      wet.connect(output);
+
+      // sawtooth LFOs (180° out of phase) controlling delay time
+      const lfoA = ctx.createOscillator(); lfoA.type = 'sawtooth';
+      const lfoB = ctx.createOscillator(); lfoB.type = 'sawtooth';
+      const lfoAGain = ctx.createGain(); lfoAGain.gain.value = grainSize/2;
+      const lfoBGain = ctx.createGain(); lfoBGain.gain.value = grainSize/2;
+      lfoA.connect(lfoAGain); lfoAGain.connect(a.delayTime);
+      lfoB.connect(lfoBGain); lfoBGain.connect(b.delayTime);
+      // DC offsets for base delay
+      const dcA = ctx.createConstantSource(); dcA.offset.value = grainSize/2;
+      const dcB = ctx.createConstantSource(); dcB.offset.value = grainSize/2;
+      dcA.connect(a.delayTime); dcB.connect(b.delayTime);
+      lfoA.start(); lfoB.start(); dcA.start(); dcB.start();
+
+      // window LFOs for grain envelopes (crossfade)
+      // simple approximation: use separate LFOs for gains in triangle shape
+      const envA = ctx.createOscillator(); envA.type = 'triangle';
+      const envB = ctx.createOscillator(); envB.type = 'triangle';
+      const envAGain = ctx.createGain(); envAGain.gain.value = 0.5;
+      const envBGain = ctx.createGain(); envBGain.gain.value = 0.5;
+      const envADC = ctx.createConstantSource(); envADC.offset.value = 0.5;
+      const envBDC = ctx.createConstantSource(); envBDC.offset.value = 0.5;
+      envA.connect(envAGain); envAGain.connect(aGain.gain); envADC.connect(aGain.gain);
+      envB.connect(envBGain); envBGain.connect(bGain.gain); envBDC.connect(bGain.gain);
+      envA.start(); envB.start(); envADC.start(); envBDC.start();
+
+      const obj = { in: input, out: output };
+      obj.set = (name, value, allParams) => {
+        const ap = allParams || p;
+        const semi = Number.isFinite(ap.semitones) ? ap.semitones : 0;
+        const mix = Number.isFinite(ap.mix) ? ap.mix : 0;
+        const ratio = Math.pow(2, semi/12);
+        // rate = (1 - ratio) / grainSize. Positive semi = speed up = LFO negative slope.
+        const rate = Math.max(0.1, Math.abs(1 - ratio) / grainSize);
+        lfoA.frequency.setTargetAtTime(rate, ctx.currentTime, 0.02);
+        lfoB.frequency.setTargetAtTime(rate, ctx.currentTime, 0.02);
+        // env rate = 2x grain rate, offset
+        envA.frequency.setTargetAtTime(rate, ctx.currentTime, 0.02);
+        envB.frequency.setTargetAtTime(rate, ctx.currentTime, 0.02);
+        // wet/dry
+        if (semi === 0) {
+          wet.gain.setTargetAtTime(0, ctx.currentTime, 0.02);
+          dry.gain.setTargetAtTime(1, ctx.currentTime, 0.02);
+        } else {
+          wet.gain.setTargetAtTime(mix, ctx.currentTime, 0.02);
+          dry.gain.setTargetAtTime(1 - mix, ctx.currentTime, 0.02);
+        }
+      };
+      return obj;
+    }
+  },
+
+  /* ---------- ROBOT / RING MODULATOR ---------- */
+  {
+    id: 'robot', name: 'ROBOT',
+    params: [
+      {n:'freq', min:20, max:500, def:80},
+      {n:'mix', min:0, max:1, def:1.0},
+    ],
+    build(ctx, p, s) {
+      const input = ctx.createGain();
+      const output = ctx.createGain();
+      const dry = ctx.createGain();
+      const wet = ctx.createGain();
+      const mod = ctx.createOscillator(); mod.type = 'sine';
+      const modGain = ctx.createGain(); modGain.gain.value = 1;
+      const ring = ctx.createGain(); ring.gain.value = 0;
+      mod.connect(ring.gain);
+      input.connect(ring); ring.connect(wet);
+      input.connect(dry);
+      dry.connect(output); wet.connect(output);
+      mod.start();
+      return {
+        in: input, out: output,
+        set: (name, value, allParams) => {
+          const ap = allParams || p;
+          mod.frequency.setTargetAtTime(ap.freq, ctx.currentTime, 0.02);
+          wet.gain.setTargetAtTime(ap.mix, ctx.currentTime, 0.02);
+          dry.gain.setTargetAtTime(1 - ap.mix, ctx.currentTime, 0.02);
+        }
+      };
+    }
+  },
+
+  /* ---------- CHORUS ---------- */
+  {
+    id: 'chorus', name: 'CHORUS',
+    params: [
+      {n:'rate', min:0.1, max:5, def:1.5},
+      {n:'depth', min:0, max:0.01, def:0.003},
+      {n:'mix', min:0, max:1, def:0.5},
+    ],
+    build(ctx, p, s) {
+      const input = ctx.createGain();
+      const output = ctx.createGain();
+      const dry = ctx.createGain();
+      const wet = ctx.createGain();
+      input.connect(dry); dry.connect(output);
+
+      // 3 voices
+      const voices = [];
+      for (let i = 0; i < 3; i++) {
+        const d = ctx.createDelay(0.05); d.delayTime.value = 0.015 + i * 0.003;
+        const lfo = ctx.createOscillator(); lfo.type = 'sine';
+        const lfoGain = ctx.createGain();
+        lfo.frequency.value = 1.5 + i * 0.1;
+        lfo.connect(lfoGain); lfoGain.connect(d.delayTime);
+        input.connect(d); d.connect(wet);
+        lfo.start();
+        voices.push({d, lfo, lfoGain});
+      }
+      wet.connect(output);
+      return {
+        in: input, out: output,
+        set: (name, value, allParams) => {
+          const ap = allParams || p;
+          voices.forEach((v, i) => {
+            v.lfo.frequency.setTargetAtTime(ap.rate * (1 + i * 0.07), ctx.currentTime, 0.02);
+            v.lfoGain.gain.setTargetAtTime(ap.depth, ctx.currentTime, 0.02);
+          });
+          wet.gain.setTargetAtTime(ap.mix, ctx.currentTime, 0.02);
+          dry.gain.setTargetAtTime(1 - ap.mix * 0.5, ctx.currentTime, 0.02);
+        }
+      };
+    }
+  },
+
+  /* ---------- DISTORTION ---------- */
+  {
+    id: 'dist', name: 'DISTORTION',
+    params: [
+      {n:'drive', min:0, max:1, def:0.4},
+      {n:'tone', min:200, max:8000, def:2000},
+      {n:'mix', min:0, max:1, def:0.6},
+    ],
+    build(ctx, p, s) {
+      const input = ctx.createGain();
+      const output = ctx.createGain();
+      const dry = ctx.createGain();
+      const wet = ctx.createGain();
+      const shaper = ctx.createWaveShaper();
+      shaper.oversample = '4x';
+      const tone = ctx.createBiquadFilter(); tone.type = 'lowpass';
+      const makeCurve = (k) => {
+        const n = 2048; const c = new Float32Array(n);
+        const deg = Math.PI / 180; const amount = k * 100;
+        for (let i = 0; i < n; i++) {
+          const x = i * 2 / n - 1;
+          c[i] = (3 + amount) * x * 20 * deg / (Math.PI + amount * Math.abs(x));
+        }
+        return c;
+      };
+      input.connect(dry); dry.connect(output);
+      input.connect(shaper); shaper.connect(tone); tone.connect(wet);
+      wet.connect(output);
+      return {
+        in: input, out: output,
+        set: (name, value, allParams) => {
+          const ap = allParams || p;
+          shaper.curve = makeCurve(ap.drive);
+          tone.frequency.setTargetAtTime(ap.tone, ctx.currentTime, 0.02);
+          wet.gain.setTargetAtTime(ap.mix, ctx.currentTime, 0.02);
+          dry.gain.setTargetAtTime(1 - ap.mix, ctx.currentTime, 0.02);
+        }
+      };
+    }
+  },
+
+  /* ---------- TELEPHONE ---------- */
+  {
+    id: 'phone', name: 'TELEPHONE',
+    params: [ {n:'amount', min:0, max:1, def:1.0} ],
+    build(ctx, p, s) {
+      const input = ctx.createGain();
+      const output = ctx.createGain();
+      const dry = ctx.createGain();
+      const wet = ctx.createGain();
+      const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 300;
+      const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 3400;
+      const peak = ctx.createBiquadFilter(); peak.type = 'peaking'; peak.frequency.value = 1800; peak.gain.value = 6; peak.Q.value = 1.5;
+      // light distortion
+      const sh = ctx.createWaveShaper();
+      const c = new Float32Array(1024);
+      for (let i = 0; i < 1024; i++) { const x = i*2/1024 - 1; c[i] = Math.tanh(x*3); }
+      sh.curve = c;
+      input.connect(dry); dry.connect(output);
+      input.connect(hp); hp.connect(lp); lp.connect(peak); peak.connect(sh); sh.connect(wet);
+      wet.connect(output);
+      return {
+        in: input, out: output,
+        set: (name, value, allParams) => {
+          const ap = allParams || p;
+          wet.gain.setTargetAtTime(ap.amount, ctx.currentTime, 0.02);
+          dry.gain.setTargetAtTime(1 - ap.amount, ctx.currentTime, 0.02);
+        }
+      };
+    }
+  },
+
+  /* ---------- UNDERWATER ---------- */
+  {
+    id: 'water', name: 'UNDERWATER',
+    params: [
+      {n:'depth', min:0, max:1, def:0.7},
+      {n:'wobble', min:0, max:10, def:3},
+    ],
+    build(ctx, p, s) {
+      const input = ctx.createGain();
+      const output = ctx.createGain();
+      const lp = ctx.createBiquadFilter(); lp.type = 'lowpass';
+      const d = ctx.createDelay(0.05); d.delayTime.value = 0.01;
+      const lfo = ctx.createOscillator(); lfo.type = 'sine';
+      const lfoGain = ctx.createGain();
+      lfo.connect(lfoGain); lfoGain.connect(d.delayTime);
+      lfo.start();
+      input.connect(lp); lp.connect(d); d.connect(output);
+      return {
+        in: input, out: output,
+        set: (name, value, allParams) => {
+          const ap = allParams || p;
+          lp.frequency.setTargetAtTime(8000 - ap.depth * 7200, ctx.currentTime, 0.02);
+          lfo.frequency.setTargetAtTime(ap.wobble, ctx.currentTime, 0.02);
+          lfoGain.gain.setTargetAtTime(0.003 * ap.depth, ctx.currentTime, 0.02);
+        }
+      };
+    }
+  },
+
+  /* ---------- DEMON (low pitch + distortion) ---------- */
+  {
+    id: 'demon', name: 'DEMON',
+    params: [ {n:'intensity', min:0, max:1, def:0.8} ],
+    build(ctx, p, s) {
+      // cheap demon: pitch down via playback + distortion + low rumble
+      const input = ctx.createGain();
+      const output = ctx.createGain();
+      const grain = ctx.createDelay(0.2);
+      const lfo = ctx.createOscillator(); lfo.type = 'sawtooth'; lfo.frequency.value = 10;
+      const lfoGain = ctx.createGain(); lfoGain.gain.value = 0.005;
+      const dc = ctx.createConstantSource(); dc.offset.value = 0.04;
+      lfo.connect(lfoGain); lfoGain.connect(grain.delayTime);
+      dc.connect(grain.delayTime);
+      lfo.start(); dc.start();
+      const sh = ctx.createWaveShaper();
+      const c = new Float32Array(2048);
+      for (let i = 0; i < 2048; i++) { const x = i*2/2048-1; c[i] = Math.tanh(x*4); }
+      sh.curve = c;
+      const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2000;
+      input.connect(grain); grain.connect(sh); sh.connect(lp); lp.connect(output);
+      return {
+        in: input, out: output,
+        set: (name, value, allParams) => {
+          const ap = allParams || p;
+          lfoGain.gain.setTargetAtTime(0.005 * ap.intensity, ctx.currentTime, 0.02);
+          output.gain.setTargetAtTime(1 + ap.intensity * 0.3, ctx.currentTime, 0.02);
+        }
+      };
+    }
+  },
+
+  /* ---------- CHIPMUNK (high pitch) ---------- */
+  {
+    id: 'chipmunk', name: 'CHIPMUNK',
+    params: [ {n:'intensity', min:0, max:1, def:0.7} ],
+    build(ctx, p, s) {
+      // opposite of demon: faster playback (pitch up) via inverted grain
+      const input = ctx.createGain();
+      const output = ctx.createGain();
+      const grain = ctx.createDelay(0.1);
+      const lfo = ctx.createOscillator(); lfo.type = 'sawtooth'; lfo.frequency.value = 30;
+      const lfoGain = ctx.createGain(); lfoGain.gain.value = -0.003;
+      const dc = ctx.createConstantSource(); dc.offset.value = 0.025;
+      lfo.connect(lfoGain); lfoGain.connect(grain.delayTime);
+      dc.connect(grain.delayTime);
+      lfo.start(); dc.start();
+      const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 200;
+      input.connect(grain); grain.connect(hp); hp.connect(output);
+      return {
+        in: input, out: output,
+        set: (name, value, allParams) => {
+          const ap = allParams || p;
+          lfoGain.gain.setTargetAtTime(-0.003 * ap.intensity, ctx.currentTime, 0.02);
+        }
+      };
+    }
+  },
+
+  /* ---------- DELAY ---------- */
+  {
+    id: 'delay', name: 'DELAY',
+    params: [
+      {n:'time', min:0.02, max:1.5, def:0.35},
+      {n:'feedback', min:0, max:0.95, def:0.4},
+      {n:'mix', min:0, max:1, def:0.35},
+    ],
+    build(ctx, p, s) {
+      const input = ctx.createGain();
+      const output = ctx.createGain();
+      const dry = ctx.createGain();
+      const wet = ctx.createGain();
+      const d = ctx.createDelay(2.0);
+      const fb = ctx.createGain();
+      const filt = ctx.createBiquadFilter(); filt.type = 'lowpass'; filt.frequency.value = 5000;
+      input.connect(dry); dry.connect(output);
+      input.connect(d); d.connect(filt); filt.connect(fb); fb.connect(d);
+      d.connect(wet); wet.connect(output);
+      return {
+        in: input, out: output,
+        set: (name, value, allParams) => {
+          const ap = allParams || p;
+          d.delayTime.setTargetAtTime(ap.time, ctx.currentTime, 0.02);
+          fb.gain.setTargetAtTime(ap.feedback, ctx.currentTime, 0.02);
+          wet.gain.setTargetAtTime(ap.mix, ctx.currentTime, 0.02);
+          dry.gain.setTargetAtTime(1 - ap.mix * 0.3, ctx.currentTime, 0.02);
+        }
+      };
+    }
+  },
+
+  /* ---------- EQ (3-BAND) ---------- */
+  {
+    id: 'eq', name: 'EQ 3-BAND',
+    params: [
+      {n:'low',  min:-18, max:18, def:0},
+      {n:'mid',  min:-18, max:18, def:0},
+      {n:'high', min:-18, max:18, def:0},
+    ],
+    build(ctx, p, s) {
+      const input = ctx.createGain();
+      const output = ctx.createGain();
+      const lo = ctx.createBiquadFilter(); lo.type = 'lowshelf'; lo.frequency.value = 250;
+      const mi = ctx.createBiquadFilter(); mi.type = 'peaking'; mi.frequency.value = 1500; mi.Q.value = 0.7;
+      const hi = ctx.createBiquadFilter(); hi.type = 'highshelf'; hi.frequency.value = 4000;
+      input.connect(lo); lo.connect(mi); mi.connect(hi); hi.connect(output);
+      return {
+        in: input, out: output,
+        set: (name, value, allParams) => {
+          const ap = allParams || p;
+          lo.gain.setTargetAtTime(ap.low, ctx.currentTime, 0.02);
+          mi.gain.setTargetAtTime(ap.mid, ctx.currentTime, 0.02);
+          hi.gain.setTargetAtTime(ap.high, ctx.currentTime, 0.02);
+        }
+      };
+    }
+  },
+];
+
+/* init audio FX state */
+for (const afx of AUDIO_FX) {
+  const params = {};
+  for (const p of afx.params) params[p.n] = p.def;
+  state.audioFX = state.audioFX || {};
+  state.audioFX[afx.id] = {
+    on: false, params,
+    _node: null, // built node
+  };
+}
+
+function setupAudioGraph(stream) {
+  if (!audio.ctx) {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    audio.ctx = new AC();
+  }
+  // resume if suspended (iOS)
+  if (audio.ctx.state === 'suspended') audio.ctx.resume();
+
+  // disconnect old source
+  if (audio.micSource) try { audio.micSource.disconnect(); } catch {}
+
+  audio.micStream = stream;
+  audio.micSource = audio.ctx.createMediaStreamSource(stream);
+  if (!audio.masterGain) {
+    audio.masterGain = audio.ctx.createGain();
+    audio.masterGain.gain.value = 1.0;
+    audio.destination = audio.ctx.createMediaStreamDestination();
+    audio.masterGain.connect(audio.destination);
+    // analyser for mic meter
+    audio.analyser = audio.ctx.createAnalyser();
+    audio.analyser.fftSize = 256;
+    audio.masterGain.connect(audio.analyser);
+    // NOTE: we deliberately do NOT connect masterGain -> audio.ctx.destination
+    // to avoid live feedback through speakers. The mic audio only goes to the recording stream.
+  }
+  rebuildAudioChain();
+}
+
+function rebuildAudioChain() {
+  if (!audio.ctx || !audio.micSource) return;
+  try {
+    // resume ctx if suspended (iOS)
+    if (audio.ctx.state === 'suspended') {
+      audio.ctx.resume().catch(()=>{});
+    }
+    // disconnect old chain carefully
+    try { audio.micSource.disconnect(); } catch {}
+    if (audio._gate) { try { audio._gate.disconnect(); } catch {} }
+    audio.fxChain.forEach(n => {
+      try { n.inNode.disconnect(); } catch {}
+      try { n.outNode.disconnect(); } catch {}
+    });
+    audio.fxChain = [];
+
+    // mute gate (post-source)
+    const gate = audio.ctx.createGain();
+    gate.gain.value = audio.micMuted ? 0 : 1;
+    audio.micSource.connect(gate);
+
+    let prev = gate;
+    for (const afx of AUDIO_FX) {
+      const st = state.audioFX[afx.id];
+      if (!st.on) continue;
+      // build node if not already
+      if (!st._node) {
+        try {
+          st._node = afx.build(audio.ctx, st.params, st);
+        } catch (e) {
+          console.warn('audio fx build failed:', afx.id, e);
+          continue;
+        }
+      }
+      // push initial params
+      try { st._node.set(null, null, st.params); } catch(e){ console.warn('set params failed:', afx.id, e); }
+      try {
+        prev.connect(st._node.in);
+        prev = st._node.out;
+        audio.fxChain.push({ inNode: st._node.in, outNode: st._node.out });
+      } catch (e) {
+        console.warn('audio fx connect failed:', afx.id, e);
+      }
+    }
+    try { prev.connect(audio.masterGain); } catch(e){ console.warn(e); }
+    audio._gate = gate;
+  } catch (e) {
+    console.warn('rebuildAudioChain error:', e);
+  }
+}
+
+function setAudioFXParam(fxId, paramName, value) {
+  const afx = AUDIO_FX.find(f => f.id === fxId);
+  const st = state.audioFX[fxId];
+  st.params[paramName] = value;
+  if (st._node && st.on) {
+    try { st._node.set(paramName, value, st.params); } catch(e) { console.warn('setAudioFXParam:', e); }
+  }
+}
+
+function toggleAudioFX(fxId) {
+  state.audioFX[fxId].on = !state.audioFX[fxId].on;
+  rebuildAudioChain();
+}
+
+function setMicMuted(m) {
+  audio.micMuted = m;
+  if (audio._gate) audio._gate.gain.setTargetAtTime(m ? 0 : 1, audio.ctx.currentTime, 0.01);
+}
+
+
+async function flipCamera() {
+  state.facing = state.facing === 'user' ? 'environment' : 'user';
+  try {
+    await startCamera();
+    toast('CAM ' + (state.facing === 'user' ? 'FRONT' : 'REAR'));
+  } catch { state.facing = state.facing === 'user' ? 'environment' : 'user'; }
+}
+
+/* =========================================================================
+   RENDER LOOP
+   ========================================================================= */
+let rafId = 0;
+let startTime = performance.now();
+
+function resize() {
+  const stage = $('stage');
+  const rect = stage.getBoundingClientRect();
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = Math.floor(rect.width * dpr);
+  const h = Math.floor(rect.height * dpr);
+  canvas.width = w; canvas.height = h;
+  canvas.style.width = rect.width + 'px';
+  canvas.style.height = rect.height + 'px';
+}
+window.addEventListener('resize', () => { resize(); });
+
+function drawPass(prog, srcTex, extraTex, targetFBO, fx, flipX, flipY) {
+  gl.bindFramebuffer(gl.FRAMEBUFFER, targetFBO ? targetFBO.fb : null);
+  const vw = targetFBO ? targetFBO.w : canvas.width;
+  const vh = targetFBO ? targetFBO.h : canvas.height;
+  gl.viewport(0, 0, vw, vh);
+
+  gl.useProgram(prog);
+  gl.bindBuffer(gl.ARRAY_BUFFER, quad);
+  const posLoc = gl.getAttribLocation(prog, 'a_pos');
+  gl.enableVertexAttribArray(posLoc);
+  gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
+
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, srcTex);
+  const uTex = gl.getUniformLocation(prog, 'u_tex');
+  if (uTex) gl.uniform1i(uTex, 0);
+
+  if (extraTex) {
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, extraTex);
+    const uPrev = gl.getUniformLocation(prog, 'u_prev');
+    if (uPrev) gl.uniform1i(uPrev, 1);
+  }
+
+  const uRes = gl.getUniformLocation(prog, 'u_res');
+  if (uRes) gl.uniform2f(uRes, vw, vh);
+  const uTime = gl.getUniformLocation(prog, 'u_time');
+  if (uTime) gl.uniform1f(uTime, (performance.now() - startTime) / 1000);
+  const uAmt = gl.getUniformLocation(prog, 'u_amt');
+  if (uAmt) gl.uniform1f(uAmt, fx ? state.activeFX[fx.id].amt : 1.0);
+
+  const uFy = gl.getUniformLocation(prog, 'u_flipY');
+  if (uFy) gl.uniform1f(uFy, flipY ? 1.0 : 0.0);
+  const uFx = gl.getUniformLocation(prog, 'u_flipX');
+  if (uFx) gl.uniform1f(uFx, flipX ? 1.0 : 0.0);
+
+  if (fx) {
+    for (const p of fx.params) {
+      const loc = gl.getUniformLocation(prog, 'p_' + p.n);
+      if (loc) gl.uniform1f(loc, state.activeFX[fx.id].params[p.n]);
+    }
+    /* chroma uniforms */
+    const ck = state.activeFX[fx.id].chroma || { mode: 0, color: [0, 1, 0], thresh: 0.3, soft: 0.1, invert: 0 };
+    const ckCol = gl.getUniformLocation(prog, 'u_ckColor');
+    if (ckCol) gl.uniform3f(ckCol, ck.color[0], ck.color[1], ck.color[2]);
+    const ckT = gl.getUniformLocation(prog, 'u_ckThresh');
+    if (ckT) gl.uniform1f(ckT, ck.thresh);
+    const ckS = gl.getUniformLocation(prog, 'u_ckSoft');
+    if (ckS) gl.uniform1f(ckS, ck.soft);
+    const ckM = gl.getUniformLocation(prog, 'u_ckMode');
+    if (ckM) gl.uniform1f(ckM, ck.mode);
+    const ckI = gl.getUniformLocation(prog, 'u_ckInvert');
+    if (ckI) gl.uniform1f(ckI, ck.invert);
+  }
+
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+}
+
+function drawChromaBlend(preTex, postTex, ck, targetFBO) {
+  gl.bindFramebuffer(gl.FRAMEBUFFER, targetFBO ? targetFBO.fb : null);
+  const vw = targetFBO ? targetFBO.w : canvas.width;
+  const vh = targetFBO ? targetFBO.h : canvas.height;
+  gl.viewport(0, 0, vw, vh);
+
+  const prog = chromaBlendProgram;
+  gl.useProgram(prog);
+  gl.bindBuffer(gl.ARRAY_BUFFER, quad);
+  const posLoc = gl.getAttribLocation(prog, 'a_pos');
+  gl.enableVertexAttribArray(posLoc);
+  gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
+
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, preTex);
+  gl.uniform1i(gl.getUniformLocation(prog, 'u_tex'), 0);
+  gl.activeTexture(gl.TEXTURE1);
+  gl.bindTexture(gl.TEXTURE_2D, postTex);
+  gl.uniform1i(gl.getUniformLocation(prog, 'u_prev'), 1);
+
+  gl.uniform3f(gl.getUniformLocation(prog, 'u_ckColor'), ck.color[0], ck.color[1], ck.color[2]);
+  gl.uniform1f(gl.getUniformLocation(prog, 'u_ckThresh'), ck.thresh);
+  gl.uniform1f(gl.getUniformLocation(prog, 'u_ckSoft'), ck.soft);
+  gl.uniform1f(gl.getUniformLocation(prog, 'u_ckMode'), ck.mode);
+  gl.uniform1f(gl.getUniformLocation(prog, 'u_ckInvert'), ck.invert);
+
+  // flip uniforms — not used here but present in VS
+  const uFy = gl.getUniformLocation(prog, 'u_flipY');
+  if (uFy) gl.uniform1f(uFy, 0.0);
+  const uFx = gl.getUniformLocation(prog, 'u_flipX');
+  if (uFx) gl.uniform1f(uFx, 0.0);
+
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+}
+
+function render() {
+  rafId = requestAnimationFrame(render);
+
+  if (!video.videoWidth) return;
+
+  try {
+    resize();
+
+    /* upload video to texture */
+    gl.bindTexture(gl.TEXTURE_2D, videoTex);
+    try {
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video);
+    } catch { return; }
+
+    /* determine intermediate FBO size - match canvas (capped) */
+    const maxDim = 1280;
+    let fw = canvas.width, fh = canvas.height;
+    if (fw > maxDim || fh > maxDim) {
+      const s = Math.min(maxDim/fw, maxDim/fh);
+      fw = Math.floor(fw*s); fh = Math.floor(fh*s);
+    }
+    if (fw < 2) fw = 2; if (fh < 2) fh = 2;
+    ensureFBOs(fw, fh);
+
+    const activeList = FX.filter(f => state.activeFX[f.id].on);
+
+    if (activeList.length === 0) {
+      /* straight passthrough with front-cam mirror */
+      drawPass(passProgram, videoTex, null, null, null, state.facing === 'user', true);
+      return;
+    }
+
+    /* Always run chain to an FBO (fboFinal = src after last iteration),
+       then a final blit to screen AND to fboPrev. This guarantees feedback
+       has valid data and the screen always shows a valid frame. */
+
+    /* first pass: video -> fboA */
+    drawPass(passProgram, videoTex, null, fboA, null, state.facing === 'user', true);
+    let src = fboA, dst = fboB;
+
+    for (let i = 0; i < activeList.length; i++) {
+      const fx = activeList[i];
+      const prog = fxPrograms[fx.id];
+      if (!prog) continue;
+      const ck = state.activeFX[fx.id].chroma;
+      const useChroma = ck && ck.mode > 0;
+
+      if (useChroma) {
+        // snapshot pre-FX to fboC
+        drawPass(passProgram, src.tex, null, fboC, null, false, false);
+        // run FX into dst
+        drawPass(prog, src.tex, fx.needPrev ? fboPrev.tex : null, dst, fx, false, false);
+        // chroma blend: blend pre (fboC) with post (dst) -> write to src
+        // after this src holds the blended result, which is what we want for next iteration.
+        // No swap needed — src stays as current output, dst stays as workspace.
+        drawChromaBlend(fboC.tex, dst.tex, ck, src);
+      } else {
+        drawPass(prog, src.tex, fx.needPrev ? fboPrev.tex : null, dst, fx, false, false);
+        const t = src; src = dst; dst = t;
+      }
+    }
+    // After loop: `src` holds the final chain output in an FBO.
+
+    /* Blit final to screen */
+    drawPass(passProgram, src.tex, null, null, null, false, false);
+
+    /* Also blit final to fboPrev for next frame's feedback effects */
+    drawPass(passProgram, src.tex, null, fboPrev, null, false, false);
+  } catch (err) {
+    console.warn('render frame error:', err);
+    // do NOT break the loop; next frame will retry
+  }
+}
+
+/* =========================================================================
+   RECORDING
+   ========================================================================= */
+function pickMime() {
+  const cands = [
+    'video/mp4;codecs=h264',
+    'video/mp4',
+    'video/webm;codecs=vp9',
+    'video/webm;codecs=vp8',
+    'video/webm',
+  ];
+  for (const m of cands) {
+    if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(m)) return m;
+  }
+  return '';
+}
+
+function startRecording() {
+  if (state.recording) return;
+  const videoStream = canvas.captureStream(30);
+  // combine with processed audio track from our audio graph
+  const combined = new MediaStream();
+  videoStream.getVideoTracks().forEach(t => combined.addTrack(t));
+  if (audio.destination && audio.destination.stream) {
+    audio.destination.stream.getAudioTracks().forEach(t => combined.addTrack(t));
+  } else if (state.stream) {
+    // fallback to raw mic track if audio graph wasn't set up
+    state.stream.getAudioTracks().forEach(t => combined.addTrack(t));
+  }
+  const mime = pickMime();
+  try {
+    state.recorder = new MediaRecorder(combined, mime ? { mimeType: mime, videoBitsPerSecond: 6_000_000, audioBitsPerSecond: 192_000 } : undefined);
+  } catch (e) {
+    toast('REC NOT SUPPORTED'); return;
+  }
+  state.recChunks = [];
+  state.recorder.ondataavailable = (e) => { if (e.data && e.data.size) state.recChunks.push(e.data); };
+  state.recorder.onstop = () => {
+    const type = state.recorder.mimeType || 'video/webm';
+    const blob = new Blob(state.recChunks, { type });
+    if (state.lastBlobURL) URL.revokeObjectURL(state.lastBlobURL);
+    state.lastBlob = blob;
+    state.lastBlobURL = URL.createObjectURL(blob);
+    showExport(blob, type);
+  };
+  state.recorder.start(100);
+  state.recording = true;
+  state.recStart = performance.now();
+  $('recBtn').classList.add('recording');
+  $('recIndicator').classList.add('active');
+  updateTimer();
+  toast('REC START');
+}
+
+function stopRecording() {
+  if (!state.recording) return;
+  state.recorder.stop();
+  state.recording = false;
+  $('recBtn').classList.remove('recording');
+  $('recIndicator').classList.remove('active');
+  $('mainTimer').textContent = 'READY';
+}
+
+let timerRaf = 0;
+function updateTimer() {
+  if (!state.recording) return;
+  const s = Math.floor((performance.now() - state.recStart)/1000);
+  const mm = String(Math.floor(s/60)).padStart(2,'0');
+  const ss = String(s%60).padStart(2,'0');
+  $('recTime').textContent = `${mm}:${ss}`;
+  $('mainTimer').textContent = `REC ${mm}:${ss}`;
+  timerRaf = requestAnimationFrame(updateTimer);
+}
+
+function showExport(blob, type) {
+  const ext = type.includes('mp4') ? 'mp4' : 'webm';
+  const dl = $('downloadLink');
+  dl.href = state.lastBlobURL;
+  dl.download = `livefx-${Date.now()}.${ext}`;
+  const kb = Math.round(blob.size/1024);
+  const size = kb > 1024 ? (kb/1024).toFixed(1) + ' MB' : kb + ' KB';
+  $('exportInfo').textContent = `${size} · ${ext.toUpperCase()} · ready to save`;
+  $('exportModal').classList.add('show');
+  /* attempt auto-save trigger (mobile blocks programmatic click in some contexts, but try) */
+  try { dl.click(); } catch {}
+}
+
+/* =========================================================================
+   SCREENSHOT
+   ========================================================================= */
+function takeShot() {
+  $('flash').classList.add('go');
+  setTimeout(() => $('flash').classList.remove('go'), 350);
+  canvas.toBlob((blob) => {
+    if (!blob) return;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `livefx-shot-${Date.now()}.png`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+    toast('SHOT SAVED');
+  }, 'image/png');
+}
+
+/* =========================================================================
+   TOAST
+   ========================================================================= */
+let toastT = 0;
+function toast(msg) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastT);
+  toastT = setTimeout(() => t.classList.remove('show'), 1400);
+}
+
+/* =========================================================================
+   WIRING
+   ========================================================================= */
+$('startBtn').onclick = async () => {
+  buildUI();
+  try {
+    await startCamera();
+    $('intro').style.display = 'none';
+    resize();
+    startTime = performance.now();
+    render();
+    /* attempt fullscreen on the app element for mobile browser chrome hiding */
+    tryFullscreen();
+  } catch {}
+};
+
+function tryFullscreen() {
+  const el = document.documentElement;
+  const req = el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen;
+  if (req) req.call(el).catch(()=>{});
+  /* try locking orientation as a nice-to-have */
+  if (screen.orientation && screen.orientation.lock) {
+    screen.orientation.lock('portrait').catch(()=>{});
+  }
+}
+
+$('flipBtn').onclick = () => flipCamera();
+$('shotBtn').onclick = () => takeShot();
+$('uiBtn').onclick = () => {
+  state.uiHidden = !state.uiHidden;
+  $('app').classList.toggle('hide-ui', state.uiHidden);
+  toast(state.uiHidden ? 'UI HIDDEN' : 'UI SHOWN');
+};
+
+$('recBtn').onclick = () => state.recording ? stopRecording() : startRecording();
+
+$('panicBtn').onclick = () => {
+  for (const fx of FX) {
+    if (state.activeFX[fx.id].on) toggleFX(fx.id);
+  }
+  toast('ALL FX OFF');
+};
+$('resetBtn').onclick = () => {
+  for (const fx of FX) {
+    const st = state.activeFX[fx.id];
+    if (st.on) toggleFX(fx.id);
+    st.amt = 1.0;
+    for (const p of fx.params) st.params[p.n] = p.def;
+  }
+  /* re-render UI to reset slider positions */
+  buildUI();
+  toast('FX RESET');
+};
+
+$('closeExportBtn').onclick = () => $('exportModal').classList.remove('show');
+$('shareBtn').onclick = async () => {
+  if (!state.lastBlob) return;
+  const type = state.lastBlob.type;
+  const ext = type.includes('mp4') ? 'mp4' : 'webm';
+  const file = new File([state.lastBlob], `livefx-${Date.now()}.${ext}`, { type });
+  try {
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], title: 'LiveFX recording' });
+    } else {
+      toast('SHARE NOT SUPPORTED'); 
+    }
+  } catch (e) { toast('SHARE CANCELED'); }
+};
+
+/* =========================================================================
+   CHROMA KEY MODAL
+   ========================================================================= */
+let currentChromaFxId = null;
+
+function rgbToHex(r, g, b) {
+  const to = v => Math.round(v * 255).toString(16).padStart(2, '0').toUpperCase();
+  return '#' + to(r) + to(g) + to(b);
+}
+function hexToRgb(hex) {
+  const h = hex.replace('#','');
+  return [parseInt(h.slice(0,2),16)/255, parseInt(h.slice(2,4),16)/255, parseInt(h.slice(4,6),16)/255];
+}
+
+function openChromaModal(fxId) {
+  currentChromaFxId = fxId;
+  const fx = FX.find(f => f.id === fxId);
+  const ck = state.activeFX[fxId].chroma;
+  $('ckFxName').textContent = fx.name;
+  // mode buttons
+  document.querySelectorAll('.ck-mode-btn').forEach(b => {
+    b.classList.toggle('active', parseInt(b.dataset.mode) === ck.mode);
+  });
+  // color
+  const hex = rgbToHex(ck.color[0], ck.color[1], ck.color[2]);
+  $('ckColorInput').value = hex;
+  $('ckHex').textContent = hex;
+  $('ckBigSwatch').style.background = hex;
+  // sliders
+  $('ckThresh').value = ck.thresh; $('ckThreshVal').textContent = ck.thresh.toFixed(2);
+  $('ckSoft').value = ck.soft; $('ckSoftVal').textContent = ck.soft.toFixed(2);
+  // invert
+  $('ckInvert').classList.toggle('on', ck.invert > 0.5);
+  // show
+  $('chromaModal').classList.add('show');
+}
+
+function closeChromaModal() {
+  $('chromaModal').classList.remove('show');
+  if (currentChromaFxId) refreshChromaButton(currentChromaFxId);
+  // also clear eyedropper if still on
+  $('eyeOverlay').classList.remove('show');
+  eyedropperActive = false;
+  currentChromaFxId = null;
+}
+
+document.querySelectorAll('.ck-mode-btn').forEach(b => {
+  b.onclick = () => {
+    if (!currentChromaFxId) return;
+    const m = parseInt(b.dataset.mode);
+    state.activeFX[currentChromaFxId].chroma.mode = m;
+    document.querySelectorAll('.ck-mode-btn').forEach(x => x.classList.toggle('active', x === b));
+  };
+});
+
+$('ckColorInput').oninput = () => {
+  if (!currentChromaFxId) return;
+  const hex = $('ckColorInput').value;
+  const rgb = hexToRgb(hex);
+  state.activeFX[currentChromaFxId].chroma.color = rgb;
+  $('ckHex').textContent = hex.toUpperCase();
+  $('ckBigSwatch').style.background = hex;
+};
+
+$('ckThresh').oninput = () => {
+  if (!currentChromaFxId) return;
+  const v = parseFloat($('ckThresh').value);
+  state.activeFX[currentChromaFxId].chroma.thresh = v;
+  $('ckThreshVal').textContent = v.toFixed(2);
+};
+$('ckSoft').oninput = () => {
+  if (!currentChromaFxId) return;
+  const v = parseFloat($('ckSoft').value);
+  state.activeFX[currentChromaFxId].chroma.soft = v;
+  $('ckSoftVal').textContent = v.toFixed(2);
+};
+$('ckInvert').onclick = () => {
+  if (!currentChromaFxId) return;
+  const el = $('ckInvert');
+  const on = !el.classList.contains('on');
+  el.classList.toggle('on', on);
+  state.activeFX[currentChromaFxId].chroma.invert = on ? 1 : 0;
+};
+
+$('ckDoneBtn').onclick = closeChromaModal;
+
+/* click outside box closes modal */
+$('chromaModal').addEventListener('click', (e) => {
+  if (e.target.id === 'chromaModal') closeChromaModal();
+});
+
+/* =========================================================================
+   EYEDROPPER
+   ========================================================================= */
+let eyedropperActive = false;
+
+$('ckEyeBtn').onclick = () => {
+  if (!currentChromaFxId) return;
+  eyedropperActive = true;
+  $('chromaModal').classList.remove('show');
+  $('eyeOverlay').classList.add('show');
+  $('ckEyeBtn').classList.add('active');
+  toast('TAP VIDEO TO PICK COLOR');
+};
+
+$('eyeOverlay').addEventListener('click', (e) => {
+  if (!eyedropperActive || !currentChromaFxId) return;
+  e.preventDefault();
+  e.stopPropagation();
+
+  // get tap position relative to canvas
+  const rect = canvas.getBoundingClientRect();
+  const x = (e.clientX - rect.left) / rect.width;
+  const y = (e.clientY - rect.top) / rect.height;
+
+  // read pixel from canvas (using 2D ctx read via a temp canvas)
+  // easier: use gl.readPixels from the current canvas
+  const px = Math.floor(x * canvas.width);
+  const py = Math.floor((1 - y) * canvas.height); // WebGL origin is bottom-left
+  const pixel = new Uint8Array(4);
+  try {
+    gl.readPixels(px, py, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
+  } catch (err) {
+    toast('COLOR READ FAILED'); return;
+  }
+  const rgb = [pixel[0]/255, pixel[1]/255, pixel[2]/255];
+  state.activeFX[currentChromaFxId].chroma.color = rgb;
+  // if mode was off, turn on to "only on color" by default so user sees effect
+  if (state.activeFX[currentChromaFxId].chroma.mode === 0) {
+    state.activeFX[currentChromaFxId].chroma.mode = 1;
+  }
+
+  eyedropperActive = false;
+  $('eyeOverlay').classList.remove('show');
+  $('ckEyeBtn').classList.remove('active');
+  // reopen modal with updated values
+  openChromaModal(currentChromaFxId);
+  toast('COLOR PICKED');
+});
+
+/* double-tap stage to hide/show UI */
+let lastTap = 0;
+$('stage').addEventListener('click', (e) => {
+  if (eyedropperActive) return; // eyedropper owns taps
+  const now = Date.now();
+  if (now - lastTap < 350) {
+    state.uiHidden = !state.uiHidden;
+    $('app').classList.toggle('hide-ui', state.uiHidden);
+  }
+  lastTap = now;
+});
+
+/* keep recording timer ticking */
+setInterval(() => { if (state.recording) updateTimer(); }, 250);
+
+/* iOS needs a user gesture for fullscreen AND video to autoplay. We have the intro button. */
+
+/* prevent default gestures that break fullscreen */
+document.addEventListener('gesturestart', e => e.preventDefault());
+document.addEventListener('touchmove', e => {
+  if (e.target.closest('#panel-wrap') || e.target.closest('input[type=range]')) return;
+  e.preventDefault();
+}, { passive: false });
+
+</script>
+</body>
+</html>
